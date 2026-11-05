@@ -1,0 +1,13 @@
+.git
+.opencode
+backend/.venv
+backend/__pycache__
+backend/.pytest_cache
+backend/artifacts
+backend/evidence
+frontend/node_modules
+frontend/.svelte-kit
+frontend/build
+frontend/coverage
+**/__pycache__
+**/*.pyc

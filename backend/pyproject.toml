@@ -1,0 +1,68 @@
+[project]
+name = "pentest-platform"
+version = "0.1.0"
+description = "On-premises AI-assisted web and API penetration testing platform"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.115.6",
+  "uvicorn[standard]==0.34.0",
+  "sqlalchemy==2.0.36",
+  "alembic==1.14.0",
+  "pydantic==2.10.4",
+  "pydantic-settings==2.7.0",
+  "argon2-cffi==23.1.0",
+  "pyotp==2.9.0",
+  "cryptography==44.0.0",
+  "cvss==3.4",
+  "httpx==0.28.1",
+  "jinja2==3.1.5",
+  "reportlab==4.2.5",
+  "psycopg[binary]==3.2.3",
+  "boto3==1.35.90",
+  "python-multipart==0.0.20",
+  "jsonschema==4.23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.4",
+  "pytest-cov==6.0.0",
+  "pytest-asyncio==0.25.0",
+  "ruff==0.8.4",
+  "mypy==1.14.0",
+  "types-boto3==1.35.90",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+branch = true
+source = ["pentest_platform"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = false

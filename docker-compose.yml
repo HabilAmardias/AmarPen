@@ -1,0 +1,110 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pentest
+      POSTGRES_USER: pentest
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pentest-dev-password}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pentest -d pentest"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  s3:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: s3
+      DEBUG: "0"
+      PERSISTENCE: "1"
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4566/_localstack/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  mock-llm:
+    build:
+      context: .
+      dockerfile: deploy/mock-llm/Dockerfile
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    environment: &platform-env
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://pentest:${POSTGRES_PASSWORD:-pentest-dev-password}@db:5432/pentest
+      SECRET_KEY: ${SECRET_KEY:-replace-with-a-long-random-secret}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-vW5tQvAKfz8Ucz2u50oS1I-ZwCWZ_jHft8S9wCf3kIU=}
+      AUDIT_ANCHOR_KEY: ${AUDIT_ANCHOR_KEY:-replace-with-a-separate-audit-anchor}
+      EVIDENCE_ENCRYPTION_KEY: ${EVIDENCE_ENCRYPTION_KEY:-}
+      BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-change-me-bootstrap-token}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      EVIDENCE_BACKEND: s3
+      S3_BUCKET: ${S3_BUCKET:-evidence}
+      S3_ENDPOINT: http://s3:4566
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-test}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-test}
+      MODEL_PROFILE_NAME: local-default
+      MODEL_PROFILE_BASE_URL: http://mock-llm:8080/v1
+      MODEL_PROFILE_MODEL: mock-pentest
+      SEED_BASELINE: "true"
+      TOOLS_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+      mock-llm:
+        condition: service_started
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "pentest_platform.workers.main"]
+    environment: *platform-env
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  localstack-data:

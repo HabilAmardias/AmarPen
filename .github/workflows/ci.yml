@@ -1,0 +1,68 @@
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.5"
+      - run: uv sync --extra dev --frozen
+      - run: uv run python scripts/check_architecture.py
+      - run: uv run python scripts/check_test_inventory.py
+      - run: uv run ruff check src tests
+      - run: uv run mypy src
+      - run: mkdir -p artifacts
+      - run: |
+          uv run pytest tests/unit/usecases tests/unit/controllers \
+            --junitxml=artifacts/backend-unit.xml \
+            --cov=pentest_platform.usecases \
+            --cov=pentest_platform.controllers \
+            --cov-branch \
+            --cov-report=json:artifacts/backend-coverage.json \
+            --cov-report=term-missing
+      - run: uv run python scripts/check_coverage.py artifacts/backend-coverage.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-artifacts
+          path: backend/artifacts
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run check
+      - run: bun run test:inventory
+      - run: bun run test:unit
+      - run: bun run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-test-artifacts
+          path: |
+            frontend/coverage
+            frontend/build

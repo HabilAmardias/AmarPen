@@ -1,10 +1,12 @@
 # AI Penetration Testing Platform Functional Requirements Document
 
-Version 1.1 | 4 November 2026 | MVP requirements baseline for review
+Version 1.2 | 5 November 2026 | MVP requirements baseline for review
 
 Audience: Engineering, security analysts, designers, QA, and acceptance reviewers.
 
 Revision 1.1 expands finding-based retesting and adds Administrator-only system prompt management for each agent and configured LLM profile. User prompts and runtime task inputs are outside this management feature. Existing requirement IDs remain stable.
+
+Revision 1.2 adds section 5.1 defining the multi-agent architecture, agent contracts, workflow authority, handoffs, execution boundaries, and diagrams. Existing requirement IDs remain stable; FR-AGENT requirements extend the baseline.
 
 ## 1 Purpose and conventions
 
@@ -158,6 +160,118 @@ Acceptance: Restarting services does not lose recorded tasks or repeat side effe
 Tests shall record temporary accounts, files, sessions, and other artifacts requiring cleanup. Cleanup shall be bounded, authorized, and attributable. A run can complete only when tasks have terminal outcomes and remaining cleanup obligations are explicitly recorded.
 
 Acceptance: Stop or completion preserves a cleanup checklist. Cleanup failures are visible in the engagement and report. Temporary evidence is not deleted before durable capture and authorized retention decisions.
+
+### 5.1 Multi agent architecture and contracts
+
+This section makes the agent design mandatory. Diagram arrows describe logical work and data flow; the durable workflow engine schedules every executable task. An agent role is a separate instruction set and task context, not a requirement for a separate server or unique underlying model. All roles execute on-premises and use the shared LLM gateway. Only approved inference traffic may reach a cloud model.
+
+**FR-AGENT-001 Orchestration and authoritative execution**
+
+The AI Orchestrator shall propose plans, assignments, dependencies, and follow-up investigations. The backend workflow engine shall own durable task state, dispatch, execution authority, retries, budgets, locks, cancellation, and run-state transitions. Agents cannot authorize their own actions or independently spawn executable work outside the engine. User pause and stop commands do not depend on an LLM response.
+
+Acceptance: An orchestrator proposal creates work only after backend validation and persistence. A model attempting to bypass a paused run, expand scope, or dispatch directly is rejected and audited. Restarting the orchestrator preserves authoritative task state.
+
+**FR-AGENT-002 Named roles and contracts**
+
+The platform shall provide the following logical roles with explicit inputs, structured outputs, and permitted proposals. Inputs are restricted to the task's authorized context and referenced records. All testing actions remain subject to the execution gate in FR-AGENT-005.
+
+| Agent role | Inputs | Structured outputs | Permitted proposals |
+| --- | --- | --- | --- |
+| Orchestrator | Approved scope, catalogue, run state, asset map, task results. | Task plan, dependencies, assignment, budgets, follow-up reasons. | Schedule eligible roles and revise the plan within authorization. |
+| Discovery | Approved seed targets, access profile, bounded discovery tasks. | Pages, endpoints, methods, parameters, services, workflow map. | Approved browser, HTTP, or separately scoped service discovery. |
+| Web Testing | Relevant pages, parameters, access context, selected web scenarios. | Candidate findings, expected and actual behavior, evidence references. | Catalogue-based web checks through tool adapters. |
+| API Testing | Observed API endpoints, allowed methods, schemas if supplied, test identities. | API candidates, request-level evidence, coverage outcomes. | Catalogue-based API checks through tool adapters. |
+| Authorization and Business Logic | Role and ownership context, workflow states, approved or inferred rules. | Access or flow candidates, rule provenance, uncertainty, evidence. | Bounded cross-account and workflow checks with suitable prerequisites. |
+| Validation | Candidate revision, baseline behavior, raw evidence references, scenario criteria. | VALIDATED, REJECTED, or INCONCLUSIVE verdict; rationale and duplicate links. | Evidence inspection and bounded reproduction or follow-up requests. |
+| Risk Assessment | Validated finding, demonstrated impact, business context, approved risk policy. | Proposed CVSS metrics, likelihood and impact, rationale, missing information. | Request deterministic calculation and flag assumptions for user review. |
+| Reporting | Reviewed findings, calculated assessments, overrides, coverage, retest records. | Evidence-linked report draft and completeness issues. | Assemble and flag gaps; never approve its own final report. |
+
+Acceptance: Each task records its role and satisfies the role's input and output schema. The same model can serve several roles while each has its own context and assigned system prompt. Missing credentials, workflow rules, evidence, or business context remain explicit limitations. Web and API roles avoid duplicate execution through scenario ownership and shared task keys.
+
+**FR-AGENT-003 Handoffs and validation feedback**
+
+Discovery results shall update the asset map and trigger eligible test selection. Independent specialist tests may proceed as soon as their prerequisites are available. Candidate findings go to Validation before scoring or confirmed report inclusion. Validation may request a specific, bounded follow-up through the Orchestrator; it must explain the evidence gap. Only validated findings proceed to confirmed assessment, and final report issue requires Reviewer approval.
+
+Acceptance: A fixture follows discovery, specialist testing, validation, scoring, drafting, and review with linked records. A failed validation returns a reasoned follow-up or terminal rejected or inconclusive verdict. Configure task, iteration, request, and model budgets so feedback loops terminate with a visible unresolved outcome rather than continuing indefinitely.
+
+Figure 1 shows the logical agent workflow. Independent branches share budgets and locks; they do not directly call one another to execute tests.
+
+```mermaid
+flowchart TD
+    USER[Authorized analyst] --> ENGINE[Durable workflow engine]
+    ENGINE <--> ORCH[Orchestrator Agent]
+    ORCH --> DISC[Discovery Agent]
+    DISC --> PLAN[Updated asset map and test plan]
+    PLAN --> WEB[Web Testing Agent]
+    PLAN --> API[API Testing Agent]
+    PLAN --> BIZ[Authorization and Business Logic Agent]
+    WEB --> CAND[Candidate findings and evidence references]
+    API --> CAND
+    BIZ --> CAND
+    CAND --> VALID[Validation Agent]
+    VALID -->|Bounded follow up| ORCH
+    VALID -->|Validated| RISK[Risk Assessment Agent]
+    RISK --> SCORE[Deterministic scoring services]
+    SCORE --> REPORT[Reporting Agent]
+    REPORT --> REVIEW[Analyst edits and Reviewer approval]
+    REVIEW --> PDF[Versioned PDF]
+```
+
+**FR-AGENT-004 Task context and shared records**
+
+Each task shall have an isolated context containing task ID, role, actor chain, engagement and run IDs, authorized asset and scenario references, input-record revisions, access-profile references, dependencies, budgets, deadline, expected output schema, permitted adapters, and the pinned system prompt release and model profile. Credentials are resolved by trusted services through secret references, not copied into shared agent messages.
+
+Agents shall exchange validated structured records and evidence references through a run-scoped workspace rather than relying on conversation memory. Task results include status, observations, output-record IDs, evidence IDs, limitations, cleanup obligations, and proposed follow-ups. All records retain provenance from engagement through run, task, tool or model execution, evidence, finding, assessment, and report.
+
+Acceptance: One task cannot read an unrelated engagement or overwrite another task's inputs. Concurrent results preserve revisions. Restart and resume reconstruct context from durable records. Stale, malformed, or untraceable outputs cannot silently change a reviewed finding.
+
+**FR-AGENT-005 Controlled tools and model access**
+
+Every role shall use the shared LLM gateway with its pinned system instructions and approved model profile. Any proposed target action shall pass a backend execution gate checking current authorization, target scope, run state, scenario applicability, actor permissions, resource locks, and shared budgets. Only isolated tool workers execute approved actions. Workers capture evidence independently of agent narrative. No agent receives unrestricted shell, raw provider credentials, or a direct route to target execution.
+
+Acceptance: Web, API, business-logic, discovery, and validation reproduction tasks all use the same enforced gate. Denied proposals do not execute. The Risk Assessment role cannot directly set calculated scores, and Reporting cannot fabricate evidence or mark an unreviewed draft approved. Audit events correlate proposal, decision, execution, evidence, and outcome.
+
+Figure 2 shows shared services and trust boundaries. Target traffic and optional cloud inference use separate outbound policies. Audit capture spans all model, gate, worker, and administrative activity.
+
+```mermaid
+flowchart TD
+    subgraph ONPREM[On premises platform]
+        ADMIN[Administrator] --> REG[Versioned system prompt registry]
+        AGENT[Any agent task] --> GATEWAY[Shared LLM gateway]
+        REG -->|Pinned instructions| GATEWAY
+        GATEWAY --> LOCAL[Approved local LLM]
+        AGENT -->|Structured proposal| POLICY[Backend execution gate]
+        CONTROL[Analyst pause or stop] --> ENGINE[Workflow state and cancellation]
+        ENGINE --> POLICY
+        POLICY --> WORKER[Isolated tool workers]
+        WORKER --> EVIDENCE[Evidence store and shared records]
+        EVIDENCE --> AGENT
+        GATEWAY -.-> AUDIT[Audit trail]
+        POLICY -.-> AUDIT
+        WORKER -.-> AUDIT
+        REG -.-> AUDIT
+    end
+    GATEWAY -->|Approved inference content| CLOUD[Approved cloud LLM]
+    WORKER -->|Authorized test traffic| TARGET[Target web application or API]
+```
+
+**FR-AGENT-006 Concurrency and resource ownership**
+
+The engine shall coordinate per-target traffic budgets, per-identity sessions, and locks for state-changing workflow resources across all roles. The Orchestrator may split independent assets or scenarios into separate tasks, but global limits remain authoritative. A candidate or scenario ownership key prevents redundant testing while allowing evidence from distinct roles to be linked.
+
+Acceptance: Unrelated endpoint checks run concurrently. Password changes on the same account and conflicting operations on the same transaction serialize. Duplicate task delivery does not cause duplicate state-changing actions, and aggregate traffic remains within the engagement limits.
+
+**FR-AGENT-007 Lifecycle failures and bounded reasoning**
+
+Agent tasks shall honor workflow cancellation and bounded retries. Invalid output, refusal, missing prerequisites, model outage, worker failure, or exhausted reasoning budgets shall produce explicit task outcomes, with the run handling required by FR-RUN. Paused or stopped tasks cannot dispatch follow-ups, and late results cannot revive execution. Cleanup follows the recorded, bounded obligations.
+
+Acceptance: Cancellation, timeouts, repeated invalid outputs, and feedback-budget exhaustion preserve evidence and expose unresolved coverage. A recoverable model outage causes the defined controlled pause. Agent failure never becomes a passing test or a confirmed vulnerability by itself.
+
+**FR-AGENT-008 Finding based retest routing**
+
+A selected-finding retest shall create linked tasks using the original finding revision and reproduction criteria. The Orchestrator assigns only relevant specialist roles and necessary bounded prerequisite discovery, then routes new evidence through Validation and any required reassessment. Record differences in scenario, tool, model, and system prompt versions. Reporting uses the resulting reviewed retest records to create a new report snapshot.
+
+Acceptance: Retesting an invoice ownership defect routes to authorization testing and validation without launching the full web and API catalogue. Interrupted or inconclusive attempts preserve prior validated disposition. Original evidence, overrides, and issued reports remain unchanged.
 
 ## 6 Testing catalogue and tools
 
@@ -423,6 +537,7 @@ The implementation shall maintain these logical records; physical tables and ser
 | Session and authentication challenge | User, expiration, revocation, and restricted preauthentication state. |
 | Engagement and authorization | Scope versions, rules, owner, approvals, access profile, and business context. |
 | Run and task | Effective configuration, state, dependencies, worker authority, budgets, checkpoints, and cleanup. |
+| Agent task context and result | Role, actor chain, versioned inputs, authorized references, prompt and model binding, output schema, budgets, task outcome, evidence references, and bounded follow-ups. |
 | Scenario and tool execution | Catalogue and framework versions, adapter and template versions, inputs, outcomes, and artifact references. |
 | Finding and evidence | Claim revisions, validation, affected assets, reproduction, restricted originals, redacted derivatives, and hashes. |
 | Assessment revision | CVSS inputs and output, business policy and factors, confidence, manual decisions, and history. |
@@ -436,7 +551,7 @@ Every mutation endpoint shall enforce action permission, input validation, objec
 
 ## 14 Acceptance evidence register
 
-QA shall record requirement ID, fixture, expected outcome, actual outcome, evidence location, environment, version, and reviewer. Required suites cover authentication and roles; scope and egress; lifecycle and failure injection; supported scenario ground truth; evidence integrity; scoring; finding-based retests; provider compatibility; system prompt access, role separation, agent and LLM assignment, publication, pinning and rollback; audit reconstruction; PDF output; and backup restoration. Product traceability is in PRD section 9; measurable targets are in the NFRD.
+QA shall record requirement ID, fixture, expected outcome, actual outcome, evidence location, environment, version, and reviewer. Required suites cover authentication and roles; scope and egress; lifecycle and failure injection; supported scenario ground truth; evidence integrity; scoring; finding-based retests; provider compatibility; system prompt access, role separation, agent and LLM assignment, publication, pinning and rollback; audit reconstruction; PDF output; and backup restoration. Multi-agent suites shall cover FR-AGENT-001 through FR-AGENT-008, including schema-valid handoffs, separate contexts, bounded feedback, shared budgets, duplicate delivery, denied execution, late responses, and retest routing. Product traceability is in PRD section 9; measurable targets are in the NFRD.
 
 ## 15 Technical reference register
 

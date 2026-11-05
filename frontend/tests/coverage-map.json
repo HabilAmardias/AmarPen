@@ -1,0 +1,95 @@
+{
+  "src/lib/components/AppShell.svelte": [
+    "tests/unit/components/AppShell.test.ts"
+  ],
+  "src/lib/components/ConfirmDialog.svelte": [
+    "tests/unit/components/ConfirmDialog.test.ts"
+  ],
+  "src/lib/components/CoverageTable.svelte": [
+    "tests/unit/components/Assessment.test.ts"
+  ],
+  "src/lib/components/EmptyState.svelte": [
+    "tests/unit/components/States.test.ts"
+  ],
+  "src/lib/components/ErrorView.svelte": [
+    "tests/unit/components/States.test.ts"
+  ],
+  "src/lib/components/LoadingState.svelte": [
+    "tests/unit/components/States.test.ts"
+  ],
+  "src/lib/components/RunControls.svelte": [
+    "tests/unit/components/RunControls.test.ts"
+  ],
+  "src/lib/components/SeverityMeter.svelte": [
+    "tests/unit/components/Assessment.test.ts"
+  ],
+  "src/lib/components/StatusBadge.svelte": [
+    "tests/unit/components/StatusBadge.test.ts"
+  ],
+  "src/routes/+error.svelte": [
+    "tests/unit/routes/auth-pages.test.ts"
+  ],
+  "src/routes/+layout.svelte": [
+    "tests/unit/routes/root-layout.test.ts"
+  ],
+  "src/routes/+page.svelte": [
+    "tests/unit/routes/auth-pages.test.ts"
+  ],
+  "src/routes/account/enroll/+page.svelte": [
+    "tests/unit/routes/auth-pages.test.ts"
+  ],
+  "src/routes/account/recovery/+page.svelte": [
+    "tests/unit/routes/auth-pages.test.ts"
+  ],
+  "src/routes/login/+page.svelte": [
+    "tests/unit/routes/auth-pages.test.ts"
+  ],
+  "src/routes/login/totp/+page.svelte": [
+    "tests/unit/routes/auth-pages.test.ts"
+  ],
+  "src/routes/(app)/+layout.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/dashboard/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/engagements/new/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/engagements/[id]/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/engagements/[id]/coverage/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/engagements/[id]/findings/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/engagements/[id]/findings/[findingId]/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/engagements/[id]/reports/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/audit/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/admin/+layout.svelte": [
+    "tests/unit/routes/admin-pages.test.ts"
+  ],
+  "src/routes/(app)/admin/users/+page.svelte": [
+    "tests/unit/routes/admin-pages.test.ts"
+  ],
+  "src/routes/(app)/admin/prompts/+page.svelte": [
+    "tests/unit/routes/admin-pages.test.ts"
+  ],
+  "src/routes/(app)/admin/model-profiles/+page.svelte": [
+    "tests/unit/routes/admin-pages.test.ts"
+  ],
+  "src/routes/(app)/admin/risk-policies/+page.svelte": [
+    "tests/unit/routes/admin-pages.test.ts"
+  ],
+  "src/lib/components/AgentActivity.svelte": [
+    "tests/unit/components/AgentActivity.test.ts"
+  ]
+}
