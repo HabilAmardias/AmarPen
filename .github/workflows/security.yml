@@ -62,7 +62,7 @@ jobs:
         include:
           - name: backend
             context: ./backend
-            dockerfile: Dockerfile
+            dockerfile: backend/Dockerfile
           - name: frontend
             context: .
             dockerfile: frontend/Dockerfile
