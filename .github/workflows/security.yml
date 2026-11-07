@@ -61,8 +61,8 @@ jobs:
       matrix:
         include:
           - name: backend
-            context: .
-            dockerfile: backend/Dockerfile
+            context: ./backend
+            dockerfile: Dockerfile
           - name: frontend
             context: .
             dockerfile: frontend/Dockerfile
