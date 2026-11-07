@@ -1,16 +1,20 @@
 import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { goto } from '$app/navigation';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { HttpResponse, http } from 'msw';
 import AppLayout from '../../../src/routes/(app)/+layout.svelte';
 import DashboardPage from '../../../src/routes/(app)/dashboard/+page.svelte';
 import NewEngagementPage from '../../../src/routes/(app)/engagements/new/+page.svelte';
 import EngagementPage from '../../../src/routes/(app)/engagements/[id]/+page.svelte';
+import EditEngagementPage from '../../../src/routes/(app)/engagements/[id]/edit/+page.svelte';
 import CoveragePage from '../../../src/routes/(app)/engagements/[id]/coverage/+page.svelte';
 import FindingsPage from '../../../src/routes/(app)/engagements/[id]/findings/+page.svelte';
 import FindingPage from '../../../src/routes/(app)/engagements/[id]/findings/[findingId]/+page.svelte';
 import ReportsPage from '../../../src/routes/(app)/engagements/[id]/reports/+page.svelte';
 import AuditPage from '../../../src/routes/(app)/audit/+page.svelte';
+import { run } from '../../mocks/fixtures';
+import { server } from '../../setup';
 
 describe('authenticated layout', () => {
   it('loads the session and renders the shell', async () => {
@@ -27,14 +31,13 @@ describe('engagement pages', () => {
     expect(screen.getByRole('link', { name: 'New engagement' })).toHaveAttribute('href', '/engagements/new');
   });
 
-  it('creates an engagement from the form', async () => {
+  it('creates an attested engagement from a base URL', async () => {
     const user = userEvent.setup();
     render(NewEngagementPage);
-    await user.type(screen.getByLabelText('Engagement name'), 'New assessment');
-    await user.type(screen.getByLabelText('Authorization reference'), 'AUTH-2');
-    await user.type(screen.getByLabelText(/Approved targets/), 'example.org');
-    await user.click(screen.getByLabelText(/Authorization is recorded/));
-    await user.click(screen.getByRole('button', { name: 'Create engagement' }));
+    await user.type(screen.getByLabelText('Base URL'), 'https://example.org');
+    await user.click(screen.getByRole('checkbox'));
+    expect(screen.getByText(/I confirm I own this target/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Authorize and create' }));
     await waitFor(() => expect(goto).toHaveBeenCalledWith('/engagements/eng-1'));
   });
 
@@ -44,6 +47,35 @@ describe('engagement pages', () => {
     expect(screen.getByRole('heading', { name: 'Readiness' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
     expect(screen.getByText('WSTG-BUSL-01')).toBeInTheDocument();
+  });
+
+  it('refreshes background run state without reloading the page', async () => {
+    const polls: Array<() => void> = [];
+    vi.spyOn(globalThis, 'setInterval').mockImplementation(((handler: () => void) => {
+      polls.push(handler);
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as typeof setInterval);
+    server.use(
+      http.get('*/api/v1/runs/run-1', () => HttpResponse.json({ ...run, state: 'COMPLETED' }))
+    );
+    render(EngagementPage, { props: { data: { id: 'eng-1' } } });
+    await waitFor(() => expect(screen.getByText(/Execution is managed server-side/)).toBeInTheDocument());
+    await waitFor(() => expect(polls.length).toBeGreaterThan(0));
+    await Promise.all(polls.map((poll) => Promise.resolve(poll())));
+    await waitFor(() => expect(screen.queryByText(/Execution is managed server-side/)).not.toBeInTheDocument());
+    expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
+  });
+
+  it('edit engagement prefills authorization and uses the model dropdown', async () => {
+    const user = userEvent.setup();
+    render(EditEngagementPage, { props: { data: { id: 'eng-1' } } });
+    await waitFor(() => expect(screen.getByLabelText('Authorization reference')).toHaveValue('AUTH-2026-01'));
+    const model = screen.getByLabelText('Model profile') as HTMLSelectElement;
+    expect(model.value).toBe('local-default');
+    expect(model.tagName).toBe('SELECT');
+    await user.click(screen.getByLabelText(/Authorization is recorded and valid/));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(goto).toHaveBeenCalledWith('/engagements/eng-1'));
   });
 
   it('coverage page shows counts and records', async () => {

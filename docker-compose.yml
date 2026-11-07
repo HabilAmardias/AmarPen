@@ -48,6 +48,7 @@ services:
       DATABASE_URL: postgresql+psycopg://pentest:${POSTGRES_PASSWORD:-pentest-dev-password}@db:5432/pentest
       SECRET_KEY: ${SECRET_KEY:-replace-with-a-long-random-secret}
       TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-vW5tQvAKfz8Ucz2u50oS1I-ZwCWZ_jHft8S9wCf3kIU=}
+      MODEL_API_KEY_ENCRYPTION_KEY: ${MODEL_API_KEY_ENCRYPTION_KEY:-}
       AUDIT_ANCHOR_KEY: ${AUDIT_ANCHOR_KEY:-replace-with-a-separate-audit-anchor}
       EVIDENCE_ENCRYPTION_KEY: ${EVIDENCE_ENCRYPTION_KEY:-}
       BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-change-me-bootstrap-token}
@@ -60,6 +61,14 @@ services:
       MODEL_PROFILE_NAME: local-default
       MODEL_PROFILE_BASE_URL: http://mock-llm:8080/v1
       MODEL_PROFILE_MODEL: mock-pentest
+      MCP_ENABLED: "true"
+      MCP_SERVER_URL: https://mcp-server:8443/mcp
+      MCP_SERVER_STABLE_ID: local-mcp
+      MCP_SERVICE_TOKEN: ${MCP_SERVICE_TOKEN:-development-mcp-service-token}
+      MCP_AUTHORITY_SECRET: ${MCP_AUTHORITY_SECRET:-development-mcp-authority-secret}
+      MCP_CA_BUNDLE: /certs/ca.crt
+      MCP_PROTOCOL_REVISION: "2026-07-28"
+      MCP_SDK_VERSION: "2.3.0"
       SEED_BASELINE: "true"
       TOOLS_ENABLED: "false"
     depends_on:
@@ -69,8 +78,12 @@ services:
         condition: service_healthy
       mock-llm:
         condition: service_started
+      mcp-server:
+        condition: service_healthy
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./deploy/certs:/certs:ro
     healthcheck:
       test:
         [
@@ -84,13 +97,60 @@ services:
       retries: 12
     restart: unless-stopped
 
+  mcp-server:
+    build:
+      context: ./backend
+    command: ["python", "-m", "pentest_platform.mcp_server.main"]
+    environment:
+      MCP_PORT: "8443"
+      MCP_SERVICE_TOKEN: ${MCP_SERVICE_TOKEN:-development-mcp-service-token}
+      MCP_BACKEND_URL: http://backend:8000
+      MCP_TLS_CERT: /certs/server.crt
+      MCP_TLS_KEY: /certs/server.key
+      MCP_PROTOCOL_REVISION: "2026-07-28"
+      MCP_IMPLEMENTATION_VERSION: "2.3.0"
+    volumes:
+      - ./deploy/certs:/certs:ro
+    expose:
+      - "8443"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import ssl, urllib.request; urllib.request.urlopen('https://localhost:8443/healthz', context=ssl._create_unverified_context())",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
   worker:
     build:
       context: ./backend
     command: ["python", "-m", "pentest_platform.workers.main"]
     environment: *platform-env
+    volumes:
+      - ./deploy/certs:/certs:ro
     depends_on:
       backend:
+        condition: service_healthy
+      mcp-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scan-worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "pentest_platform.workers.scan_worker"]
+    environment: *platform-env
+    volumes:
+      - ./deploy/certs:/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      mcp-server:
         condition: service_healthy
     restart: unless-stopped
 

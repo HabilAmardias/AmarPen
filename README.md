@@ -10,7 +10,7 @@ On-premises AI-assisted penetration testing platform for authorized external bla
 - **PDF:** ReportLab renders selectable-text PDFs from approved immutable report snapshots.
 - **Inference:** OpenAI-compatible Chat Completions gateway with explicit profiles, structured-output validation, and no automatic cloud fallback. A deterministic mock endpoint is included for local use.
 - **Tools:** Controlled HTTP client is active. ZAP, Nuclei, Playwright, and Nmap adapters are allowlisted and disabled by default (`TOOLS_ENABLED=false`).
-- **Agentic workflow:** A durable backend scheduler owns task state, leases, budgets, locks, cancellation, and run transitions. Orchestrator, Discovery, Web Testing, API Testing, Authorization/Business Logic, Validation, Risk Assessment, and Reporting roles use pinned prompts and structured contracts through the shared LLM gateway. The bundled mock model profile exercises the full local pipeline.
+- **Agentic workflow:** A durable backend scheduler owns task state, leases, budgets, locks, cancellation, and run transitions. Orchestrator, Discovery, Web Testing, API Testing, Authorization/Business Logic, Validation, Risk Assessment, and Reporting roles use pinned prompts and structured contracts through the shared LLM gateway. Agentic runs require a latest probe result with verified structured output. The bundled mock model profile exercises the full local pipeline; chat-only or unverified profiles such as the current Ollama/Gemma configuration are blocked until the probe passes.
 
 ## Repository layout
 
@@ -128,6 +128,37 @@ bun run build
 
 Selected coverage floors: backend 80% statements / 60% branches; frontend 85% statements / 50% branches / 75% functions / 85% lines. The mandatory per-component/page test inventory is 100%.
 
+## URL-only onboarding and agent workflow
+
+- The default onboarding flow asks for a base URL and a one-click authorization attestation. The server records the user, timestamp, scope hash, source IP, user agent, and a 24-hour testing window.
+- Runs require a current, unrevoked attestation matching the engagement scope. Scope or window changes invalidate it and expose a re-attest action.
+- Discovery now crawls same-host HTML links, forms, robots, sitemap, and OpenAPI/Swagger documents. Endpoint metadata includes methods, parameters, auth state, and source.
+- Endpoint mapping is exposed as the MCP tool `map_endpoints`. Discovery automatically maps endpoints, records them as assets, and schedules an endpoint-test planning handoff.
+- 5xx endpoints are retried and then marked inconclusive; the crawler and run continue with the next endpoint.
+- Self-registration provisioning can create encrypted test identities when a registration form is discovered. If email verification or invalidation blocks it, the run records the limitation.
+- Specialists use the method-aware MCP tool `http_request`. Test identities are injected server-side; credentials never enter prompts, MCP arguments, or audit details.
+- Same-endpoint requests from different identities create authorization observations for review.
+
+## Model profiles and engagement configuration
+
+- `POST /api/v1/admin/model-profiles/{profile_id}/test` runs a bounded reachability, chat-completions, and structured-output probe. Profile creation, API-key rotation, and updates automatically record the latest test result.
+- Cloud profiles accept an API key from the admin UI. The key is encrypted at rest with `MODEL_API_KEY_ENCRYPTION_KEY` (or a key derived from `SECRET_KEY` when unset), sent only as an `Authorization: Bearer` header by the gateway, and never returned by the API or written to audit details. Existing `env:VARIABLE` secret references remain supported.
+- `GET /api/v1/model-profiles` returns sanitized enabled profile options for engagement editors.
+- Engagement creation and editing require an existing enabled model profile. The UI uses a dropdown instead of free text.
+- The engagement detail page links to **Edit engagement** so Analysts can correct authorization references, confirm validity, adjust scope/windows, or select a replacement model profile.
+
+## MCP tool integration
+
+- Agent target actions route through the local **MCP host/client** to a separate on-premises MCP server over authenticated TLS Streamable HTTP.
+- `mcp-server/mcp` exposes reviewed `http_probe`, `scan_start`, `scan_status`, and `scan_cancel` tools. The server validates its service token, forwards signed execution authority, and delegates authorization to the backend.
+- The backend internal authorize/invoke path rechecks current run state, scope, role permissions, pinned manifests, locks, and budgets before any tool executes. Authority is single-use, short-lived, and tool-bound.
+- A dedicated `scan-worker` claims durable MCP scan jobs with leases, executes reviewed adapters, records evidence/checkpoints, and honors cancellation, pause, stop, and restart reconciliation.
+- Administrators manage MCP servers/manifests under **Administration → MCP registry**: register/update servers, refresh discovery, validate draft manifests, activate/rollback, revoke, and inspect readiness. Revoking a server or manifest pauses affected runs.
+- Runs pin the active manifest; agents cannot register servers or grant themselves tools.
+- `deploy/gen-dev-certs.sh` creates local development CA/server certificates automatically via `./start.sh`. Production must use managed certificates and separate secrets.
+
+MCP environment variables include `MCP_ENABLED`, `MCP_SERVER_URL`, `MCP_SERVICE_TOKEN`, `MCP_AUTHORITY_SECRET`, `MCP_CA_BUNDLE`, `MCP_PROTOCOL_REVISION`, and `MCP_SDK_VERSION`.
+
 ## Agentic architecture
 
 - `AgentExecutionUsecase` loads an isolated task context, resolves the pinned prompt release and model profile, applies the execution gate, runs approved tools through isolated workers, validates structured agent output, and persists results/proposals.
@@ -136,6 +167,7 @@ Selected coverage floors: backend 80% statements / 60% branches; frontend 85% st
 - `AssetRecord`, `AgentTaskResult`, `ResourceLock`, and `BudgetLedger` provide the run-scoped workspace, evidence-linked results, resource ownership, and shared request/model/task/iteration budgets.
 - Validation is mandatory before risk assessment and report inclusion. Risk Assessment can only propose inputs; deterministic scoring calculates the result. Reporting can only create a preview draft; Reviewer approval remains required.
 - Agent activity is exposed at `GET /api/v1/runs/{run_id}/agents` and rendered in the engagement detail **Agent Activity** panel.
+- The orchestrator contract permits only discovery and specialist testing tasks, requires assets and specialist scenario keys, and gets one repair attempt for invalid output. A plan that still schedules no testing pauses the run without creating a report.
 
 ## Security workflows
 
@@ -173,3 +205,4 @@ Each job fails independently. For merge blocking, mark all three jobs as require
 - Immutable report snapshots and PDF export: `FR-REPORT-*`.
 - On-premises configuration, health, backup/restore: `FR-OPS-*`.
 - Multi-agent orchestration, role contracts, handoffs, isolated task context, execution gate, concurrency, bounded failure handling, and retest routing: `FR-AGENT-001` through `FR-AGENT-008`.
+- MCP transport, registry/manifests, discovery, execution authority, reviewed adapters/evidence, durable scan jobs, audit correlation, and prompt boundaries: `FR-MCP-001` through `FR-MCP-008`.

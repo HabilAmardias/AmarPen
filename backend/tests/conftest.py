@@ -95,6 +95,8 @@ def engagement(repo, ids):
                 base_url="http://localhost:8080/v1",
                 model="mock-pentest",
                 capabilities=["chat", "structured_outputs"],
+                last_test_status="REACHABLE",
+                last_test_detail={"reachable": True, "chat_ok": True, "structured_outputs": True},
             )
         )
     repo.repo.add(

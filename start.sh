@@ -89,6 +89,8 @@ case "$ACTION" in
     ;;
 esac
 
+deploy/gen-dev-certs.sh
+
 if [ ! -f .env ]; then
   cp .env.example .env
   echo "Created .env from .env.example."

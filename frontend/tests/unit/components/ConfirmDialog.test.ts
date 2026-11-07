@@ -11,10 +11,13 @@ describe('ConfirmDialog', () => {
   it('confirms and cancels', async () => {
     const onconfirm = vi.fn();
     const oncancel = vi.fn();
-    render(ConfirmDialog, {
+    const view = render(ConfirmDialog, {
       props: { open: true, title: 'Stop run?', message: 'Permanent.', onconfirm, oncancel }
     });
-    expect(screen.getByRole('dialog')).toHaveAccessibleName('Stop run?');
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAccessibleName('Stop run?');
+    expect(view.container.contains(dialog)).toBe(false);
+    expect(document.body.contains(dialog)).toBe(true);
     await fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(onconfirm).toHaveBeenCalled();
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));

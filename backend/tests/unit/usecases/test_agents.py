@@ -10,7 +10,7 @@ from pentest_platform.domain.entities import (
     Scenario,
     Task,
 )
-from pentest_platform.domain.errors import ValidationError
+from pentest_platform.domain.errors import ConflictError, ValidationError
 from pentest_platform.usecases.agent_runtime import AgentExecutionUsecase
 from pentest_platform.usecases.agent_scheduler import AgentSchedulerUsecase
 from pentest_platform.usecases.findings import FindingUsecase
@@ -239,9 +239,9 @@ def test_orchestrator_cannot_directly_schedule_agent_managed_role(
     )
     run = RunUsecase(**base_kwargs, evidence_store=evidence_store, tool_runner=tool_runner).start(actor(), engagement.id, "direct-1")
     scheduler.tick("worker-1")
-    proposals = repo.repo.list(AgentProposal, run_id=run.id)
-    assert proposals[0].status == "DENIED"
     assert not [task for task in repo.repo.list(Task, run_id=run.id) if task.role == "validation"]
+    assert repo.repo.get(Run, run.id).state in {"PAUSING", "PAUSED"}
+    assert any(task.outcome == "INVALID_OUTPUT" for task in repo.repo.list(Task, run_id=run.id))
 
 
 def test_discovery_asset_outside_scope_is_denied(
@@ -447,3 +447,90 @@ def test_state_changing_task_waits_for_lock(base_kwargs, evidence_store, tool_ru
     scheduler = make_scheduler(base_kwargs, evidence_store, tool_runner, FakeLlmGateway())
     scheduler.tick("worker-1")
     assert repo.repo.get(Task, task.id).checkpoint.get("waiting_lock") == "state-change:example.com"
+
+
+def test_unverified_structured_output_blocks_agentic_run(
+    base_kwargs, evidence_store, tool_runner, engagement, active_release, repo
+):
+    from pentest_platform.domain.entities import ModelProfile
+
+    profile = repo.repo.find_one(ModelProfile, name="local-default")
+    profile.last_test_status = "REACHABLE"
+    profile.last_test_detail = {"reachable": True, "chat_ok": True, "structured_outputs": False}
+    repo.repo.update(profile)
+    usecase = RunUsecase(**base_kwargs, evidence_store=evidence_store, tool_runner=tool_runner)
+    with pytest.raises(ConflictError):
+        usecase.start(actor(), engagement.id, "unverified-1")
+
+
+def test_planning_failure_pauses_without_report(
+    base_kwargs, evidence_store, tool_runner, engagement, active_release, repo
+):
+    scheduler = make_scheduler(
+        base_kwargs,
+        evidence_store,
+        tool_runner,
+        FakeLlmGateway(
+            responses={
+                "orchestrator": {
+                    "tasks": [
+                        {"role": "discovery", "kind": "validation", "asset": "example.com", "reason": "bad"}
+                    ]
+                }
+            }
+        ),
+    )
+    run = RunUsecase(**base_kwargs, evidence_store=evidence_store, tool_runner=tool_runner).start(actor(), engagement.id, "planfail-1")
+    scheduler.tick("worker-1")
+    assert repo.repo.get(Run, run.id).state in {"PAUSING", "PAUSED"}
+    assert not repo.repo.list(ReportSnapshot, engagement_id=engagement.id)
+    assert not [task for task in repo.repo.list(Task, run_id=run.id) if task.role == "reporting"]
+
+
+def test_reporting_is_not_scheduled_without_completed_testing(
+    base_kwargs, evidence_store, tool_runner, engagement, active_release, repo
+):
+    executor = AgentExecutionUsecase(**base_kwargs, llm_gateway=FakeLlmGateway(), evidence_store=evidence_store, tool_runner=tool_runner)
+    run = RunUsecase(**base_kwargs, evidence_store=evidence_store, tool_runner=tool_runner).start(actor(), engagement.id, "report-gate-1")
+    with executor.uow_factory() as uow:
+        discovery = Task(id="d1", run_id=run.id, scenario_id="", role="discovery", state="FAILED")
+        uow.repo.add(discovery)
+        executor._maybe_schedule_reporting(uow, run, engagement, discovery)
+        uow.commit()
+    assert not [task for task in repo.repo.list(Task, run_id=run.id) if task.role == "reporting"]
+
+
+def test_orchestrator_invalid_plan_is_repaired_once(
+    base_kwargs, evidence_store, tool_runner, engagement, active_release, repo
+):
+    gateway = FakeLlmGateway(
+        responses={
+            "orchestrator": [
+                {"tasks": [{"role": "discovery", "kind": "validation", "asset": "example.com", "reason": "bad"}]},
+                {"tasks": [{"role": "discovery", "kind": "discovery", "asset": "example.com", "reason": "repaired"}]},
+            ]
+        }
+    )
+    scheduler = make_scheduler(base_kwargs, evidence_store, tool_runner, gateway)
+    run = RunUsecase(**base_kwargs, evidence_store=evidence_store, tool_runner=tool_runner).start(actor(), engagement.id, "repair-1")
+    scheduler.tick("worker-1")
+    assert [call["role"] for call in gateway.calls].count("orchestrator") == 2
+    assert repo.repo.get(Run, run.id).state not in {"PAUSING", "PAUSED"}
+    assert [task.role for task in repo.repo.list(Task, run_id=run.id)].count("discovery") == 1
+
+
+def test_run_with_only_orchestrator_completion_is_failed(
+    base_kwargs, evidence_store, tool_runner, engagement, active_release, repo
+):
+    scheduler = make_scheduler(base_kwargs, evidence_store, tool_runner, FakeLlmGateway())
+    run = RunUsecase(**base_kwargs, evidence_store=evidence_store, tool_runner=tool_runner).start(actor(), engagement.id, "orchestrator-only-1")
+    orchestrator = repo.repo.list(Task, run_id=run.id)[0]
+    orchestrator.state = "COMPLETED"
+    repo.repo.update(orchestrator)
+    stored = repo.repo.get(Run, run.id)
+    stored.state = "RUNNING"
+    repo.repo.update(stored)
+    scheduler.finalize()
+    finished = repo.repo.get(Run, run.id)
+    assert finished.state == "FAILED"
+    assert "without any successful" in finished.reason

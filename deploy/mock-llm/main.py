@@ -19,7 +19,17 @@ async def chat(request: Request) -> dict[str, Any]:
     messages = body.get("messages", [])
     context = _context(messages)
     role = context.get("agent_role", "orchestrator")
-    payload = _payload_for_role(role, context)
+    schema = (body.get("response_format") or {}).get("json_schema", {}).get("schema", {})
+    if "status" in schema.get("required", []):
+        payload = {"status": "ok"}
+        if "probe_id" in schema.get("required", []):
+            payload["probe_id"] = "sentinel-42"
+    elif "tool_actions" in schema.get("required", []):
+        targets = context.get("targets", [])
+        target = targets[0] if targets else "example.com"
+        payload = {"tool_actions": [{"tool": "http_probe", "arguments": {"target": target, "scenario": context.get("scenario", {}).get("key", "discovery")}, "reason": "Bounded HTTP probe for the assigned role"}]}
+    else:
+        payload = _payload_for_role(role, context)
     content = json.dumps(payload)
     return {
         "id": f"chatcmpl-{int(time.time() * 1000)}",

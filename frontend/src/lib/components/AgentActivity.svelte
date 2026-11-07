@@ -69,6 +69,63 @@
         </ul>
       </div>
     {/if}
+
+    {#if activity?.identities?.length}
+      <div class="stack">
+        <span class="hud-divider">TEST IDENTITIES</span>
+        <ul class="chip-list">
+          {#each activity.identities as identity (identity.id)}
+            <li class="chip">{identity.label} / {identity.role} / {identity.origin} / {identity.status}</li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+
+    {#if activity?.access_observations?.length}
+      <div class="stack">
+        <span class="hud-divider">AUTHORIZATION OBSERVATIONS</span>
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Authorization observations</caption>
+            <thead><tr><th scope="col">Endpoint</th><th scope="col">Method</th><th scope="col">Baseline</th><th scope="col">Comparison</th><th scope="col">Reason</th></tr></thead>
+            <tbody>
+              {#each activity.access_observations as observation (observation.id)}
+                <tr>
+                  <td class="asset-cell">{observation.endpoint}</td>
+                  <td>{observation.method}</td>
+                  <td>{observation.baseline_identity_id.slice(0, 8)} / {observation.baseline_status}</td>
+                  <td>{observation.comparison_identity_id.slice(0, 8)} / {observation.comparison_status}</td>
+                  <td class="small muted">{observation.reason}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {/if}
+
+    {#if activity?.mcp_jobs?.length}
+      <div class="stack">
+        <span class="hud-divider">MCP SCAN JOBS</span>
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">MCP scan jobs</caption>
+            <thead><tr><th scope="col">Execution</th><th scope="col">Tool</th><th scope="col">State</th><th scope="col">Progress</th><th scope="col">Error</th></tr></thead>
+            <tbody>
+              {#each activity.mcp_jobs as job (job.id)}
+                <tr>
+                  <td class="asset-cell">{job.execution_id.slice(0, 12)}…</td>
+                  <td>{job.tool}</td>
+                  <td><StatusBadge value={job.state} /></td>
+                  <td>{job.progress}%</td>
+                  <td class="small muted">{job.error || '—'}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {/if}
   {/if}
 </section>
 

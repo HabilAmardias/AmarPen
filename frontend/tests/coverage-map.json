@@ -91,5 +91,11 @@
   ],
   "src/lib/components/AgentActivity.svelte": [
     "tests/unit/components/AgentActivity.test.ts"
+  ],
+  "src/routes/(app)/engagements/[id]/edit/+page.svelte": [
+    "tests/unit/routes/core-pages.test.ts"
+  ],
+  "src/routes/(app)/admin/mcp/+page.svelte": [
+    "tests/unit/routes/admin-pages.test.ts"
   ]
 }

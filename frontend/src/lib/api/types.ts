@@ -23,6 +23,7 @@ export interface Engagement {
   description: string;
   authorization_ref: string;
   authorization_valid: boolean;
+  base_url: string;
   targets: string[];
   exclusions: string[];
   window_start: string | null;
@@ -179,6 +180,20 @@ export interface ModelProfile {
   data_boundary: string;
   capabilities: string[];
   enabled: boolean;
+  last_tested_at: string | null;
+  last_test_status: string;
+  last_test_detail: Record<string, unknown>;
+  has_api_key: boolean;
+  credential_source: 'stored' | 'environment' | 'none';
+}
+
+export interface ModelProfileOption {
+  name: string;
+  model: string;
+  data_boundary: string;
+  capabilities: string[];
+  last_test_status: string;
+  last_tested_at: string | null;
 }
 
 export interface RiskPolicy {
@@ -251,9 +266,46 @@ export interface AssetRecord {
   value: string;
 }
 
+export interface McpJobSummary {
+  id: string;
+  execution_id: string;
+  run_id: string;
+  task_id: string;
+  tool: string;
+  state: string;
+  progress: number;
+  error: string;
+}
+
 export interface AgentActivity {
   tasks: AgentTask[];
   results: AgentTaskResult[];
   proposals: AgentProposal[];
   assets: AssetRecord[];
+  mcp_jobs?: McpJobSummary[];
+  mcp_invocations?: Array<{ id: string; execution_id: string; tool: string; state: string; outcome: string }>;
+  identities?: Array<{ id: string; label: string; role: string; origin: string; status: string }>;
+  http_exchanges?: Array<{ id: string; identity_id: string; method: string; url: string; status_code: number; outcome: string }>;
+  access_observations?: Array<{ id: string; endpoint: string; method: string; baseline_identity_id: string; comparison_identity_id: string; baseline_status: number; comparison_status: number; access_granted: boolean; reason: string }>;
+}
+
+
+export interface McpManifestSummary {
+  id: string;
+  version: number;
+  state: string;
+  integrity_hash: string;
+  tool_count: number;
+}
+
+export interface McpServerSummary {
+  id: string;
+  stable_id: string;
+  endpoint: string;
+  transport: string;
+  implementation_version: string;
+  protocol_revision: string;
+  enabled: boolean;
+  last_seen: string | null;
+  manifests: McpManifestSummary[];
 }

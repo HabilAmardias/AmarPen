@@ -20,6 +20,13 @@
   let error = '';
   let correlationId = '';
   let starting = false;
+  let attesting = false;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let pollInFlight = false;
+  let disposed = false;
+
+  const ACTIVE_RUN_STATES = ['QUEUED', 'RUNNING', 'PAUSING', 'PAUSED'];
+  $: runActive = run ? ['QUEUED', 'RUNNING'].includes(run.state) : false;
 
   async function load() {
     loading = true;
@@ -58,12 +65,67 @@
     }
   }
 
+  async function reattest() {
+    attesting = true;
+    error = '';
+    try {
+      await api.engagements.attest(data.id);
+      await load();
+    } catch (cause) {
+      error = cause instanceof ApiError ? cause.message : 'Unable to record attestation';
+    } finally {
+      attesting = false;
+    }
+  }
+
   function updateRun(value: Run) {
     run = value;
     api.runs.agents(value.id).then((activity) => (agentActivity = activity)).catch(() => undefined);
   }
 
-  onMount(load);
+  function stopPolling() {
+    if (pollTimer !== null) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function startPolling() {
+    if (pollTimer !== null) return;
+    pollTimer = setInterval(refreshRun, 2000);
+  }
+
+  async function refreshRun() {
+    if (!run || !ACTIVE_RUN_STATES.includes(run.state) || pollInFlight) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    pollInFlight = true;
+    try {
+      const [latest, activity] = await Promise.all([api.runs.get(run.id), api.runs.agents(run.id)]);
+      if (disposed) return;
+      run = latest;
+      agentActivity = activity;
+      if (!ACTIVE_RUN_STATES.includes(latest.state)) stopPolling();
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) stopPolling();
+    } finally {
+      pollInFlight = false;
+    }
+  }
+
+  function onVisibilityChange() {
+    if (document.visibilityState === 'visible') refreshRun();
+  }
+
+  onMount(() => {
+    load();
+    startPolling();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      disposed = true;
+      stopPolling();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  });
 </script>
 
 <svelte:head><title>{engagement?.name ?? 'Engagement'} | AI-Assisted Pentest</title></svelte:head>
@@ -85,7 +147,10 @@
           <span>MODEL <strong>{engagement.model_profile || 'UNSET'}</strong></span>
         </div>
       </div>
-      <StatusBadge value={engagement.status} />
+      <div class="row">
+        <StatusBadge value={engagement.status} />
+        <a class="button secondary" href={`/engagements/${engagement.id}/edit`}>Edit engagement</a>
+      </div>
     </div>
 
     <nav class="tabs" aria-label="Engagement sections">
@@ -137,7 +202,11 @@
         </div>
         <h2 id="run-heading">Run Control</h2>
         {#if run}
+          {#if run.reason}<div class="alert warning" role="status">{run.reason}</div>{/if}
           <RunControls {run} onchange={updateRun} />
+          {#if runActive}
+            <p class="small muted" role="status">Execution is managed server-side and continues if you navigate away, sign out, or close this browser.</p>
+          {/if}
         {:else}
           <p class="muted">No run has started for this engagement.</p>
           <button type="button" disabled={!readiness?.ready || starting} on:click={startRun}>
@@ -146,6 +215,12 @@
           </button>
           {#if !readiness?.ready}
             <p class="alert warning" role="status">Resolve blocking readiness checks before starting.</p>
+            {#if readiness?.blocking.includes('authorization')}
+              <button type="button" disabled={attesting} on:click={reattest}>
+                {attesting ? 'Recording attestation…' : 'Re-attest current scope'}
+              </button>
+            {/if}
+            <a class="button secondary" href={`/engagements/${engagement.id}/edit`}>Resolve authorization / configuration</a>
           {/if}
         {/if}
       </section>

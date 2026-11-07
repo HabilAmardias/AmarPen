@@ -21,6 +21,7 @@ export const engagement = {
   description: 'External black-box assessment',
   authorization_ref: 'AUTH-2026-01',
   authorization_valid: true,
+  base_url: 'https://example.com',
   targets: ['example.com'],
   exclusions: ['admin.example.com'],
   window_start: '2026-01-01T00:00:00Z',
@@ -174,9 +175,23 @@ export const modelProfiles = [
     model: 'mock-pentest',
     data_boundary: 'on_premises',
     capabilities: ['chat', 'structured_outputs'],
-    enabled: true
+    enabled: true,
+    last_tested_at: '2026-01-01T12:00:00Z',
+    last_test_status: 'REACHABLE',
+    last_test_detail: { reachable: true, chat_ok: true, models_ok: true, model_present: true, structured_outputs: true, latency_ms: 42 },
+    has_api_key: false,
+    credential_source: 'none'
   }
 ];
+
+export const modelProfileOptions = modelProfiles.map(({ name, model, data_boundary, capabilities, last_test_status, last_tested_at }) => ({
+  name,
+  model,
+  data_boundary,
+  capabilities,
+  last_test_status,
+  last_tested_at
+}));
 
 export const riskPolicies = [
   { id: 'policy-1', name: 'Initial proposed matrix', version: 1, active: true, horizon: '12 months' }

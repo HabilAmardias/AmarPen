@@ -267,6 +267,14 @@ class FakeTotpService:
         return encrypted.removeprefix("enc:")
 
 
+class FakeSecretCipher:
+    def encrypt(self, secret: str) -> str:
+        return f"enc:{secret}"
+
+    def decrypt(self, encrypted: str) -> str:
+        return encrypted.removeprefix("enc:")
+
+
 class FakeEvidenceStore:
     def __init__(self):
         self.objects: dict[str, bytes] = {}
@@ -309,6 +317,7 @@ class FakeLlmGateway:
         self.fail = fail
         self.invalid = invalid
         self.calls: list[dict] = []
+        self.response_counts: dict[str, int] = {}
 
     def complete(self, profile, messages, schema=None):
         from pentest_platform.domain.errors import DependencyUnavailableError
@@ -326,7 +335,13 @@ class FakeLlmGateway:
         self.calls.append({"role": role, "context": context})
         if self.invalid:
             return {"content": {"unexpected": True}}
-        payload = self.responses.get(role) or self._default(role, context)
+        configured = self.responses.get(role)
+        if isinstance(configured, list):
+            index = self.response_counts.get(role, 0)
+            self.response_counts[role] = index + 1
+            payload = configured[min(index, len(configured) - 1)]
+        else:
+            payload = configured or self._default(role, context)
         return {"content": payload}
 
     @staticmethod
@@ -372,6 +387,52 @@ class FakeLlmGateway:
 
     def health(self, profile):
         return not self.fail
+
+    def probe(self, profile):
+        if self.fail:
+            return {
+                "status": "UNREACHABLE",
+                "reachable": False,
+                "chat_ok": False,
+                "models_ok": False,
+                "model_present": False,
+                "structured_outputs": False,
+                "latency_ms": 5,
+                "tested_at": "2026-01-01T12:00:00+00:00",
+                "error": "model unavailable",
+            }
+        return {
+            "status": "REACHABLE",
+            "reachable": True,
+            "chat_ok": True,
+            "models_ok": True,
+            "model_present": True,
+            "structured_outputs": "structured_outputs" in (profile.capabilities or []),
+            "latency_ms": 12,
+            "tested_at": "2026-01-01T12:00:00+00:00",
+            "error": "",
+        }
+
+
+class FakeMcpHost:
+    def __init__(self, tool_runner=None):
+        self.tool_runner = tool_runner
+        self.calls: list[tuple[str, dict, str]] = []
+
+    def list_tools(self):
+        return [
+            {"name": "http_probe", "description": "probe", "inputSchema": {"type": "object"}, "allowed_roles": ["discovery", "web_testing", "api_testing", "authorization_business_logic", "validation"]},
+            {"name": "scan_start", "description": "scan", "inputSchema": {"type": "object"}, "allowed_roles": ["web_testing"]},
+            {"name": "scan_status", "description": "status", "inputSchema": {"type": "object"}, "allowed_roles": ["web_testing"]},
+            {"name": "scan_cancel", "description": "cancel", "inputSchema": {"type": "object"}, "allowed_roles": ["web_testing"]},
+        ]
+
+    def call_tool(self, tool, arguments, authority_token):
+        self.calls.append((tool, arguments, authority_token))
+        if tool == "http_probe" and self.tool_runner is not None:
+            result = self.tool_runner.run("http", arguments)
+            return {"execution_id": "exec-1", "state": "COMPLETED", "result": result, "evidence_refs": []}
+        return {"execution_id": "exec-1", "state": "COMPLETED", "result": arguments, "evidence_refs": []}
 
 
 class FakeContainer:

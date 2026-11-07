@@ -16,7 +16,7 @@ from pentest_platform.usecases.reports import ReportUsecase
 from pentest_platform.usecases.runs import RunUsecase
 from pentest_platform.usecases.scoring import ScoringUsecase
 from pentest_platform.usecases.testing import TestingUsecase
-from tests.fakes import actor, user
+from tests.fakes import FakeLlmGateway, FakeSecretCipher, actor, user
 
 
 def test_engagement_listing_update_member_and_status(base_kwargs, evidence_store, engagement, repo, ids):
@@ -118,7 +118,7 @@ def test_report_preview_and_listing(base_kwargs, renderer, evidence_store, engag
 
 
 def test_admin_update_profile_and_settings(base_kwargs):
-    usecase = AdminUsecase(**base_kwargs)
+    usecase = AdminUsecase(**base_kwargs, llm_gateway=FakeLlmGateway(), secret_cipher=FakeSecretCipher())
     profile = usecase.create_model_profile(
         actor(),
         {"name": "local", "base_url": "http://localhost:8080/v1", "model": "mock"},

@@ -9,6 +9,20 @@
   export let onconfirm: () => void = () => {};
   export let oncancel: () => void = () => {};
 
+  function focusConfirm(node: HTMLButtonElement) {
+    node.focus();
+  }
+
+  function portal(node: HTMLElement) {
+    if (typeof document === 'undefined') return;
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
+
   function handleKey(event: KeyboardEvent) {
     if (open && event.key === 'Escape') {
       event.preventDefault();
@@ -20,7 +34,7 @@
 <svelte:window on:keydown={handleKey} />
 
 {#if open}
-  <div class="overlay" role="presentation">
+  <div class="overlay" role="presentation" use:portal>
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-message">
       <div class="dialog-kicker">
         <WarningOctagon size={16} weight="bold" aria-hidden="true" />
@@ -29,7 +43,7 @@
       <h2 id="dialog-title">{title}</h2>
       <p id="dialog-message">{message}</p>
       <div class="row dialog-actions">
-        <button class={danger ? 'danger' : ''} type="button" on:click={onconfirm}>{confirmLabel}</button>
+        <button use:focusConfirm class={danger ? 'danger' : ''} type="button" on:click={onconfirm}>{confirmLabel}</button>
         <button class="secondary" type="button" on:click={oncancel}>Cancel</button>
       </div>
     </div>

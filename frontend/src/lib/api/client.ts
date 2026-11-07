@@ -9,6 +9,9 @@ import type {
   Finding,
   ListResponse,
   ModelProfile,
+  McpManifestSummary,
+  McpServerSummary,
+  ModelProfileOption,
   PromptRelease,
   ReportSnapshot,
   RetestAttempt,
@@ -157,6 +160,14 @@ export const api = {
   },
   engagements: {
     list: () => request<ListResponse<Engagement>>('/engagements'),
+    quickStart: (payload: Record<string, unknown>) =>
+      request<Engagement>('/engagements/quick-start', { method: 'POST', body: payload }),
+    authorization: (id: string) =>
+      request<{ valid: boolean; reason: string; attestation: Record<string, unknown> | null; attestation_text: string }>(
+        `/engagements/${id}/authorization`
+      ),
+    attest: (id: string) =>
+      request<Record<string, unknown>>(`/engagements/${id}/attest`, { method: 'POST', body: {} }),
     get: (id: string) => request<Engagement>(`/engagements/${id}`),
     create: (payload: Record<string, unknown>) =>
       request<Engagement>('/engagements', { method: 'POST', body: payload }),
@@ -280,10 +291,17 @@ export const api = {
     previewUrl: (id: string) => url(`/reports/${id}/preview`),
     downloadUrl: (id: string) => url(`/reports/${id}/download`)
   },
+  modelProfiles: {
+    options: () => request<ListResponse<ModelProfileOption>>('/model-profiles')
+  },
   admin: {
     modelProfiles: () => request<ListResponse<ModelProfile>>('/admin/model-profiles'),
     createModelProfile: (payload: Record<string, unknown>) =>
       request<ModelProfile>('/admin/model-profiles', { method: 'POST', body: payload }),
+    updateModelProfile: (id: string, payload: Record<string, unknown>) =>
+      request<ModelProfile>(`/admin/model-profiles/${id}`, { method: 'PUT', body: payload }),
+    testModelProfile: (id: string) =>
+      request<ModelProfile>(`/admin/model-profiles/${id}/test`, { method: 'POST' }),
     riskPolicies: () => request<ListResponse<RiskPolicy>>('/admin/risk-policies'),
     createRiskPolicy: (name: string) =>
       request<RiskPolicy>('/admin/risk-policies', { method: 'POST', body: { name } }),
@@ -292,6 +310,22 @@ export const api = {
     settings: () => request<ListResponse<{ id: string; key: string; value: Record<string, unknown>; version: number }>>('/admin/settings'),
     updateSetting: (key: string, value: Record<string, unknown>) =>
       request<{ key: string }>(`/admin/settings/${key}`, { method: 'PUT', body: { value } }),
+    mcpServers: () => request<{ items: McpServerSummary[] }>('/admin/mcp/servers'),
+    createMcpServer: (payload: Record<string, unknown>) =>
+      request<McpServerSummary>('/admin/mcp/servers', { method: 'POST', body: payload }),
+    updateMcpServer: (stableId: string, payload: Record<string, unknown>) =>
+      request<McpServerSummary>(`/admin/mcp/servers/${stableId}`, { method: 'PUT', body: payload }),
+    revokeMcpServer: (stableId: string, reason: string) =>
+      request<McpServerSummary>(`/admin/mcp/servers/${stableId}/revoke`, { method: 'POST', body: { reason } }),
+    validateMcpManifest: (manifestId: string) =>
+      request<McpManifestSummary>(`/admin/mcp/manifests/${manifestId}/validate`, { method: 'POST' }),
+    revokeMcpManifest: (manifestId: string, reason: string) =>
+      request<McpManifestSummary>(`/admin/mcp/manifests/${manifestId}/revoke`, { method: 'POST', body: { reason } }),
+    discoverMcpServer: (stableId: string) =>
+      request<McpManifestSummary>(`/admin/mcp/servers/${stableId}/discover`, { method: 'POST' }),
+    activateMcpManifest: (manifestId: string) =>
+      request<McpManifestSummary>(`/admin/mcp/manifests/${manifestId}/activate`, { method: 'POST' }),
+    mcpReady: () => request<{ ready: boolean; checks: Array<{ name: string; passed: boolean; blocking: boolean; message: string }> }>('/admin/mcp/ready'),
     health: () => request<{ status: string; checks: Record<string, boolean> }>('/admin/health')
   }
 };

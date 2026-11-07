@@ -1,12 +1,14 @@
 # AI Penetration Testing Platform Functional Requirements Document
 
-Version 1.2 | 5 November 2026 | MVP requirements baseline for review
+Version 1.3 | 5 November 2026 | MVP requirements baseline for review
 
 Audience: Engineering, security analysts, designers, QA, and acceptance reviewers.
 
 Revision 1.1 expands finding-based retesting and adds Administrator-only system prompt management for each agent and configured LLM profile. User prompts and runtime task inputs are outside this management feature. Existing requirement IDs remain stable.
 
 Revision 1.2 adds section 5.1 defining the multi-agent architecture, agent contracts, workflow authority, handoffs, execution boundaries, and diagrams. Existing requirement IDs remain stable; FR-AGENT requirements extend the baseline.
+
+Revision 1.3 adopts on-premises MCP tool integration in section 5.2, updates the execution diagram, and adds requirements for tool discovery, execution authority, durable scan jobs, system prompt boundaries, and audit correlation. Existing requirement IDs remain stable; FR-MCP requirements extend the baseline.
 
 ## 1 Purpose and conventions
 
@@ -98,7 +100,7 @@ Acceptance: Out-of-scope destinations are blocked and recorded. Re-resolution or
 
 **FR-ENG-003 Readiness checks**
 
-Before a run starts, the platform shall check authorization validity, testing window, target scope, risk-policy readiness, selected model compatibility, worker availability, storage, and required audit persistence. Missing business context may permit technical testing while clearly marking business risk provisional.
+Before a run starts, the platform shall check authorization validity, testing window, target scope, risk-policy readiness, selected model compatibility, required MCP server and pinned tool-manifest compatibility, worker availability, storage, and required audit persistence. Missing business context may permit technical testing while clearly marking business risk provisional.
 
 Acceptance: An execution-blocking failure prevents start and identifies the cause. A warning cannot silently become a complete business-risk assessment. Start remains disabled until mandatory gates pass.
 
@@ -227,33 +229,38 @@ Acceptance: One task cannot read an unrelated engagement or overwrite another ta
 
 **FR-AGENT-005 Controlled tools and model access**
 
-Every role shall use the shared LLM gateway with its pinned system instructions and approved model profile. Any proposed target action shall pass a backend execution gate checking current authorization, target scope, run state, scenario applicability, actor permissions, resource locks, and shared budgets. Only isolated tool workers execute approved actions. Workers capture evidence independently of agent narrative. No agent receives unrestricted shell, raw provider credentials, or a direct route to target execution.
+Every role shall use the shared LLM gateway with its pinned system instructions and approved model profile. Any proposed target action shall pass a backend execution gate checking current authorization, target scope, run state, scenario applicability, actor permissions, resource locks, and shared budgets. Agent target actions shall use the MCP path defined in section 5.2; direct adapter or shell bypass is prohibited. Only isolated tool workers execute approved actions. Workers capture evidence independently of agent narrative. No agent receives unrestricted shell, raw provider credentials, or a direct route to target execution.
 
 Acceptance: Web, API, business-logic, discovery, and validation reproduction tasks all use the same enforced gate. Denied proposals do not execute. The Risk Assessment role cannot directly set calculated scores, and Reporting cannot fabricate evidence or mark an unreviewed draft approved. Audit events correlate proposal, decision, execution, evidence, and outcome.
 
-Figure 2 shows shared services and trust boundaries. Target traffic and optional cloud inference use separate outbound policies. Audit capture spans all model, gate, worker, and administrative activity.
+Figure 2 shows the MCP execution path and shared services. The workflow engine grants bounded execution authority, and the MCP server rechecks that authority and current run state before workers act. All platform components remain on-premises. Target traffic and optional cloud inference use separate outbound policies. Audit capture spans the full path.
 
 ```mermaid
 flowchart TD
     subgraph ONPREM[On premises platform]
-        ADMIN[Administrator] --> REG[Versioned system prompt registry]
-        AGENT[Any agent task] --> GATEWAY[Shared LLM gateway]
-        REG -->|Pinned instructions| GATEWAY
+        PROMPT[Pinned system prompts and model profile] --> AGENT[Agent runtime and MCP host]
+        AGENT <-->|Model requests and responses| GATEWAY[Shared LLM gateway]
         GATEWAY --> LOCAL[Approved local LLM]
-        AGENT -->|Structured proposal| POLICY[Backend execution gate]
-        CONTROL[Analyst pause or stop] --> ENGINE[Workflow state and cancellation]
-        ENGINE --> POLICY
-        POLICY --> WORKER[Isolated tool workers]
-        WORKER --> EVIDENCE[Evidence store and shared records]
-        EVIDENCE --> AGENT
-        GATEWAY -.-> AUDIT[Audit trail]
-        POLICY -.-> AUDIT
-        WORKER -.-> AUDIT
-        REG -.-> AUDIT
+        AGENT -->|Action proposal| ENGINE[Workflow engine and execution authority]
+        CONTROL[Analyst pause or stop] --> ENGINE
+        ENGINE -->|Authorized dispatch| CLIENT[Backend MCP client]
+        REG[Approved MCP registry and pinned tool manifest] --> CLIENT
+        CLIENT <-->|MCP tool calls and results| SERVER[On premises MCP server]
+        SERVER --> GATE[Execution gate and current state checks]
+        ENGINE -->|Current authority and cancellation| GATE
+        GATE --> ADAPTER[Tool adapters and isolated workers]
+        ADAPTER --> EVIDENCE[Local evidence and execution records]
+        EVIDENCE -->|Structured result and evidence references| SERVER
+        CLIENT -->|Validated result| AGENT
+        ENGINE -.-> AUDIT[Correlated audit trail]
+        CLIENT -.-> AUDIT
+        SERVER -.-> AUDIT
+        ADAPTER -.-> AUDIT
     end
-    GATEWAY -->|Approved inference content| CLOUD[Approved cloud LLM]
-    WORKER -->|Authorized test traffic| TARGET[Target web application or API]
+    GATEWAY -->|Approved inference traffic| CLOUD[Approved cloud LLM]
+    ADAPTER -->|Authorized target traffic| TARGET[Target web application or API]
 ```
+
 
 **FR-AGENT-006 Concurrency and resource ownership**
 
@@ -273,6 +280,60 @@ A selected-finding retest shall create linked tasks using the original finding r
 
 Acceptance: Retesting an invoice ownership defect routes to authorization testing and validation without launching the full web and API catalogue. Interrupted or inconclusive attempts preserve prior validated disposition. Original evidence, overrides, and issued reports remain unchanged.
 
+### 5.2 MCP tool integration
+
+The MVP shall use Model Context Protocol (MCP) as the interface between the backend agent runtime and testing tool services. The runtime acts as the MCP host and manages MCP clients. MCP servers expose reviewed tool adapters; isolated workers perform target operations. The backend workflow engine remains authoritative for task state, execution permission, budgets, and cancellation. MCP standardizes the interface without replacing these responsibilities.
+
+**FR-MCP-001 Local deployment and transport**
+
+The MCP host, clients, servers, tool adapters, and workers shall run on-premises. The MVP shall support an authenticated, encrypted internal Streamable HTTP service. A client-launched stdio server may be supported as a controlled local deployment option. The initial installation may use one internal server with several tool groups; a separate server per agent or tool is not required. The OpenAI-compatible LLM gateway remains the model interface. Cloud models return proposals to the local runtime and do not directly connect to testing MCP servers.
+
+Acceptance: With a local model, an authorized test completes with external vendor access blocked. A cloud-model run executes tool calls locally. An unauthenticated MCP request is rejected. The deployed client and server use an explicitly tested protocol revision and SDK versions; unsupported combinations fail readiness checks.
+
+**FR-MCP-002 Administrator registry and pinned manifests**
+
+Only Administrators shall register, configure, enable, disable, or upgrade MCP servers and tool manifests. A registry entry includes stable server ID, approved endpoint or fixed local launch specification, transport, credential reference, implementation version, and permitted tool groups. A reviewed manifest records tool names, descriptions, input and result contracts, versions, and integrity hashes. Runs pin these references. Agents cannot add endpoints, change launch commands, install servers, or grant themselves tools. Revocation blocks affected dispatch immediately and invokes run control where active execution is affected.
+
+Acceptance: Registry changes are audited. An unregistered server or changed tool contract cannot become available to a running task automatically. Missing or incompatible pinned capabilities block affected work with a visible reason. Resume rechecks revocations. Local process launch uses Administrator-approved executables and arguments rather than model-generated commands.
+
+**FR-MCP-003 Tool discovery and model translation**
+
+The backend shall obtain tool definitions through `tools/list`, validate them against the approved manifest, and expose only the subset permitted for the task role, scenario, and authorized context. It shall translate a model's structured action proposal into `tools/call` only after workflow authorization. The runtime shall map model-facing tool names to an unambiguous server ID and tool name. Models without native tool calling may use a schema-validated structured proposal through the same execution path. Discovery or a cached tool definition never grants execution permission.
+
+Acceptance: Discovery exposes only permitted capabilities. Calling a hidden or denied tool fails server-side even if its name is guessed. Malformed or unknown arguments do not execute. Tool-list changes do not silently expand permissions, and name collisions across servers cannot route a call to the wrong implementation.
+
+**FR-MCP-004 Trusted execution context and enforcement**
+
+Each call shall carry or resolve backend-issued execution authority bound to the initiating user, service identity, agent role, engagement, run, task, approved tool, and bounded execution limits. The model cannot select or override trusted identity and authorization fields. The MCP server shall verify this authority and current scope, run state, scenario permission, locks, and shared budgets before dispatch. Workers shall recheck current authority at execution checkpoints, including outbound requests and redirects. Secrets are resolved by trusted services; browser session cookies and LLM provider credentials are not forwarded as MCP authentication.
+
+Acceptance: Forged context, cross-engagement references, expired authority, revoked scope, and paused or stopped dispatch are rejected and audited. A tool call cannot bypass the gate by reaching the server directly. Aggregate limits hold across concurrent clients. Service access uses restricted credentials and the security requirements of the selected MCP transport; it does not change the username, password, TOTP, or browser-session flow.
+
+**FR-MCP-005 Reviewed adapters and evidence results**
+
+MCP tool handlers shall invoke the reviewed adapters in FR-TEST-002 through the platform use cases and isolated workers. They shall validate inputs and results, apply timeouts, and return execution status, normalized observations, limitations, tool and template versions, and authorized evidence references. Large or sensitive originals remain in local evidence storage with integrity hashes and access controls. Generic unrestricted shell, filesystem, and arbitrary template execution are prohibited. MCP errors, tool failures, and target observations remain distinct outcomes; a successful call does not establish a vulnerability or a passing test.
+
+Acceptance: Each supported adapter produces a schema-valid result linked to independently captured evidence. Invalid results become explicit errors or inconclusive coverage. Evidence references cannot expose another engagement. Unreviewed templates and arbitrary shell text are rejected. Validation still determines finding status under FR-FIND-001 and FR-FIND-002.
+
+**FR-MCP-006 Durable scan jobs and run controls**
+
+Long-running tool operations shall create durable workflow-owned jobs and return an execution ID through a bounded start call. The MCP catalogue shall expose permission-checked status and cancellation operations. Job records preserve progress, worker ownership, execution authority, evidence, terminal outcome, and cleanup obligations. Start requests shall use backend-assigned idempotency keys; an ambiguous response requires reconciliation before retrying an action that could have side effects. Request disconnect or protocol cancellation alone is not confirmation that the underlying scanner stopped.
+
+Pause, resume, and stop shall follow FR-RUN-003 through FR-RUN-006 across MCP and worker boundaries. Pause blocks further dispatch and waits for bounded checkpoints. Stop cancels queued work, signals active jobs, and escalates unresponsive workers after the configured grace period. PAUSED and STOPPED require the existing execution confirmations. Already transmitted requests and target-side effects remain disclosed.
+
+Acceptance: A lost start response and duplicate delivery produce at most one logical job. Disconnecting a client does not lose job state or falsely mark execution stopped. A scan that cannot acknowledge pause or stop triggers the defined escalation. Server restart reconciles jobs before new execution, and late results cannot revive stopped work or automatically repeat uncertain state-changing requests.
+
+**FR-MCP-007 Audit correlation and operational visibility**
+
+The audit trail shall cover MCP registry changes, capability discovery, requested and denied calls, authorization decisions, job starts, progress checkpoints, cancellations, failures, and outcomes. Invocation records shall correlate initiating user, agent and task, engagement and run, server ID and implementation version, protocol revision, manifest and tool version, sanitized arguments, timestamps in UTC, execution ID, and evidence references. Credentials and secret argument values shall be excluded from logs. Administrators shall see server readiness and failures; authorized run users shall see affected tasks, pending cancellation, and coverage limitations.
+
+Acceptance: An end-to-end fixture reconstructs the actor and execution chain from a model proposal through MCP to evidence and a finding. Missing required durable audit capture blocks protected execution under FR-AUDIT-003. Server failure is visible and never reported as successful testing. Audit access and exports retain existing permissions.
+
+**FR-MCP-008 System instructions and untrusted content**
+
+The Administrator-managed system prompt registry in section 9 shall remain the authority for each agent and LLM profile. Any MCP prompt templates are separate task content and cannot replace, publish, or update pinned system instructions. Tool descriptions, annotations, server messages, and target results shall be processed as contextual data under the approved contracts. They cannot grant permission, alter scope, override run control, or trigger unrestricted execution. The MVP may leave MCP prompt templates disabled.
+
+Acceptance: A tool response or template containing instructions to expand scope, expose credentials, change a system prompt, or bypass a stop is ineffective and recorded when detected. A tool's claimed read-only or harmless annotation cannot substitute for platform policy. Updating MCP content does not change a run's pinned system prompt release.
+
 ## 6 Testing catalogue and tools
 
 **FR-TEST-001 Versioned scenarios**
@@ -283,7 +344,7 @@ Acceptance: A run pins catalogue and framework versions. Invalid references or m
 
 **FR-TEST-002 Standard tool adapters**
 
-Workers shall expose structured adapters for ZAP, Playwright, reviewed Nuclei templates, a controlled HTTP client, and separately authorized limited Nmap discovery. Adapters validate parameters, capture tool and template versions, apply timeouts, and return normalized results and evidence references.
+The MCP server shall expose reviewed tool contracts backed by structured worker adapters for ZAP, Playwright, reviewed Nuclei templates, a controlled HTTP client, and separately authorized limited Nmap discovery, as required by section 5.2. Adapters validate parameters, capture tool and template versions, apply timeouts, and return normalized results and evidence references.
 
 Acceptance: An agent cannot submit arbitrary shell text, install a tool, or enable an unreviewed template. Tool output is retained without becoming a confirmed finding automatically. Catalogue updates do not alter an active run.
 
@@ -461,7 +522,7 @@ Acceptance: Actor types distinguish user, agent, service, worker, and unauthenti
 
 **FR-AUDIT-002 Activity coverage**
 
-The platform shall audit authentication, access denials, meaningful resource reads and searches, evidence access, downloads, configuration and permission changes, engagement actions, task and tool lifecycle, model-call lifecycle, findings, scoring overrides, cleanup, reports, retest selection and outcomes, and system prompt management. System prompt events cover draft changes, comparisons and body access, validation results, publication, agent and LLM assignment, activation, rollback, retirement, eligible deletion, and denied attempts. High-volume target exchanges are traceable execution artifacts referenced from audit events.
+The platform shall audit authentication, access denials, meaningful resource reads and searches, evidence access, downloads, configuration and permission changes, engagement actions, task and tool lifecycle, model-call lifecycle, findings, scoring overrides, cleanup, reports, retest selection and outcomes, and system prompt management. System prompt events cover draft changes, comparisons and body access, validation results, publication, agent and LLM assignment, activation, rollback, retirement, eligible deletion, and denied attempts. MCP registry, discovery, invocation, job control, and server-failure events follow FR-MCP-007. High-volume target exchanges are traceable execution artifacts referenced from audit events.
 
 Acceptance: An end-to-end fixture reconstructs who initiated, executed, changed, reviewed, and exported a result. Both control requests and confirmed outcomes are present. Technical health probes are classified separately and cannot disguise user actions.
 
@@ -513,7 +574,7 @@ Acceptance: With a local model and reachable local test target, the full assessm
 
 **FR-OPS-002 Versioned configuration**
 
-Administrators shall configure risk policies, model profiles, system prompt releases, catalogue versions, control timeouts, execution limits, retention, and session policy. Changes are audited. Runs retain their effective configuration snapshot; security revocations override previous authorization immediately through run control.
+Administrators shall configure risk policies, model profiles, system prompt releases, MCP registry and tool manifests, catalogue versions, control timeouts, execution limits, retention, and session policy. Changes are audited. Runs retain their effective configuration snapshot; security revocations override previous authorization immediately through run control.
 
 Acceptance: A reviewer can identify settings used for a historical result. An agent cannot modify administrative policies. Invalid or unapproved settings fail readiness checks.
 
@@ -525,7 +586,7 @@ Acceptance: A restore drill recovers a consistent engagement and issued report. 
 
 ## 13 Data and interface contracts
 
-The recommended logical architecture is a protected web frontend, a modular backend, durable workflow state, isolated testing workers, an evidence store, and a local report worker. The orchestrator routes reasoning through the LLM gateway and tool actions through scope enforcement and adapters. Scoring is deterministic, and audit capture spans every module. These are responsibility boundaries; they do not require a separate deployed service for every module.
+The recommended logical architecture is a protected web frontend, a modular backend, durable workflow state, isolated testing workers, an evidence store, and a local report worker. The orchestrator routes reasoning through the LLM gateway. The local MCP host and clients route authorized tool proposals to registered on-premises MCP servers, which enforce execution authority and invoke the existing adapters and workers through platform use cases. MCP handlers remain transport entry points; they do not duplicate or bypass use-case authorization and workflow logic. Scoring is deterministic, and audit capture spans every module. These are responsibility boundaries; they do not require a separate deployed service for every module.
 
 A suggested engineering baseline is a TypeScript frontend, Python backend and agents, PostgreSQL, S3-compatible local evidence storage, containerized workers, and an HTML-to-PDF renderer. The workflow implementation and exact frameworks are design choices that must satisfy the FRD and NFRD. No hosted workflow engine or identity provider is required.
 
@@ -538,6 +599,8 @@ The implementation shall maintain these logical records; physical tables and ser
 | Engagement and authorization | Scope versions, rules, owner, approvals, access profile, and business context. |
 | Run and task | Effective configuration, state, dependencies, worker authority, budgets, checkpoints, and cleanup. |
 | Agent task context and result | Role, actor chain, versioned inputs, authorized references, prompt and model binding, output schema, budgets, task outcome, evidence references, and bounded follow-ups. |
+| MCP server and tool manifest | Approved server identity and location, transport, credential reference, implementation and protocol versions, tool contracts, hashes, role permissions, activation history, and pinned run references. |
+| MCP invocation and scan job | Trusted actor and task context, server and tool binding, request correlation, idempotency key, execution authority, progress, cancellation acknowledgment, outcome, and evidence references. |
 | Scenario and tool execution | Catalogue and framework versions, adapter and template versions, inputs, outcomes, and artifact references. |
 | Finding and evidence | Claim revisions, validation, affected assets, reproduction, restricted originals, redacted derivatives, and hashes. |
 | Assessment revision | CVSS inputs and output, business policy and factors, confidence, manual decisions, and history. |
@@ -551,7 +614,7 @@ Every mutation endpoint shall enforce action permission, input validation, objec
 
 ## 14 Acceptance evidence register
 
-QA shall record requirement ID, fixture, expected outcome, actual outcome, evidence location, environment, version, and reviewer. Required suites cover authentication and roles; scope and egress; lifecycle and failure injection; supported scenario ground truth; evidence integrity; scoring; finding-based retests; provider compatibility; system prompt access, role separation, agent and LLM assignment, publication, pinning and rollback; audit reconstruction; PDF output; and backup restoration. Multi-agent suites shall cover FR-AGENT-001 through FR-AGENT-008, including schema-valid handoffs, separate contexts, bounded feedback, shared budgets, duplicate delivery, denied execution, late responses, and retest routing. Product traceability is in PRD section 9; measurable targets are in the NFRD.
+QA shall record requirement ID, fixture, expected outcome, actual outcome, evidence location, environment, version, and reviewer. Required suites cover authentication and roles; scope and egress; lifecycle and failure injection; supported scenario ground truth; evidence integrity; scoring; finding-based retests; provider compatibility; system prompt access, role separation, agent and LLM assignment, publication, pinning and rollback; audit reconstruction; PDF output; and backup restoration. Multi-agent suites shall cover FR-AGENT-001 through FR-AGENT-008, including schema-valid handoffs, separate contexts, bounded feedback, shared budgets, duplicate delivery, denied execution, late responses, and retest routing. MCP suites shall cover FR-MCP-001 through FR-MCP-008, including local and cloud-model boundaries, transport authentication, manifest pinning and revocation, filtered discovery, denied direct calls, spoofed context, name collisions, malformed results, duplicate job submission, disconnect and restart reconciliation, pause and stop confirmation, audit reconstruction, and attempted instruction overrides. Product traceability is in PRD section 9; measurable targets are in the NFRD.
 
 ## 15 Technical reference register
 
@@ -576,3 +639,7 @@ References establish definitions and integration guidance. They do not imply cer
 - Playwright API and PDF generation: https://playwright.dev/docs/api/class-page#page-pdf
 - Nmap introduction: https://nmap.org/book/intro.html
 - Future mobile reference only OWASP MASTG: https://mas.owasp.org/MASTG/
+- MCP architecture and host client server roles: https://modelcontextprotocol.io/docs/learn/architecture
+- MCP tool discovery invocation and results: https://modelcontextprotocol.io/specification/2026-07-28/server/tools
+- MCP transport bindings: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports
+- MCP security practices: https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices
