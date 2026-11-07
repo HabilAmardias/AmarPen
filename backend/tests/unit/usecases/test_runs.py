@@ -39,7 +39,7 @@ def test_start_requires_active_prompt_release(base_kwargs, evidence_store, tool_
         usecase.start(actor(), engagement.id, "idem-1")
 
 
-def test_scheduler_runs_agent_pipeline_and_records_assets(
+def test_discovery_pipeline_records_assets_without_claiming_full_assessment(
     base_kwargs, evidence_store, tool_runner, engagement, active_release, repo, ids
 ):
     llm = FakeLlmGateway()
@@ -53,7 +53,8 @@ def test_scheduler_runs_agent_pipeline_and_records_assets(
     assert "discovery" in states
     assert "reporting" in states
     assert repo.repo.list(AssetRecord, run_id=run.id)
-    assert repo.repo.get(Run, run.id).state == "COMPLETED"
+    assert repo.repo.get(Run, run.id).state == "FAILED"
+    assert repo.repo.get(Run, run.id).config_snapshot["assessment_completeness"] == "PARTIAL"
 
 
 def test_pause_resume_stop_controls(base_kwargs, evidence_store, tool_runner, engagement, active_release, repo):

@@ -161,6 +161,8 @@ MCP environment variables include `MCP_ENABLED`, `MCP_SERVER_URL`, `MCP_SERVICE_
 
 ## Agentic architecture
 
+The bounded investigation runtime supports model-proposed MCP follow-ups, durable observations, explicit prerequisite blockers, and evidence-based completion. See [agent investigation behavior and upgrade steps](docs/agent-investigations.md). **Existing installations must review, publish, and activate the generated prompt-upgrade drafts as an Administrator, then start a new run**; startup preserves existing pinned releases.
+
 - `AgentExecutionUsecase` loads an isolated task context, resolves the pinned prompt release and model profile, applies the execution gate, runs approved tools through isolated workers, validates structured agent output, and persists results/proposals.
 - `AgentSchedulerUsecase` owns queued-run transition, task claiming with leases, expired-lease recovery, pause/stop reconciliation, and bounded parallel execution.
 - `AgentProposal` records every proposed task, asset, candidate, validation verdict, risk input, or report draft with its approval/denial reason.
