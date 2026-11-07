@@ -36,15 +36,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
           scanners: vuln
+          vuln-type: library
           severity: CRITICAL,HIGH
+          format: sarif
+          output: trivy-results.sarif
           ignore-unfixed: false
+          limit-severities-for-sarif: true
           exit-code: "1"
-          format: table
 
   trivy-container:
     name: Trivy container (${{ matrix.name }})
@@ -69,11 +72,13 @@ jobs:
           load: true
           push: false
           tags: pentest-platform-${{ matrix.name }}:${{ github.sha }}
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: pentest-platform-${{ matrix.name }}:${{ github.sha }}
           severity: CRITICAL,HIGH
           ignore-unfixed: false
+          limit-severities-for-sarif: true
           exit-code: "1"
-          format: table
+          format: sarif
+          output: trivy-results.sarif
