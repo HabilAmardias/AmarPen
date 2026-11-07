@@ -414,3 +414,33 @@ def test_mcp_map_and_request_tools(base_kwargs, repo, clock, ids, evidence_store
     assert mapped["result"]["count"] == 1
     requested = usecase.invoke(req_token, "http_request", {"target": "https://example.com/health", "method": "GET", "identity_id": "identity-1"})
     assert requested["result"]["status_code"] == 200
+
+
+def test_mcp_budget_at_limit_blocks_network_before_execution(base_kwargs, repo, clock, ids, evidence_store, tool_runner, engagement):
+    from pentest_platform.domain.entities import BudgetLedger
+    add_baseline(repo, clock, ids)
+    usecase = make_mcp(base_kwargs, evidence_store, tool_runner)
+    run, task = _run_task(repo, ids, engagement, "web_testing")
+    repo.repo.add(BudgetLedger(id=ids.new_id(), run_id=run.id, request_limit=1, request_used=1))
+    with usecase.uow_factory() as uow:
+        token = usecase.issue_authority(uow, run, task, engagement, "http_probe", "web_testing")
+        uow.commit()
+    with pytest.raises(ForbiddenError, match="budget"):
+        usecase.invoke(token, "http_probe", {"target": "example.com"})
+    assert not tool_runner.calls
+
+
+def test_mcp_reclaimed_lease_rejects_old_authority(base_kwargs, repo, clock, ids, evidence_store, tool_runner, engagement):
+    add_baseline(repo, clock, ids)
+    usecase = make_mcp(base_kwargs, evidence_store, tool_runner)
+    run, task = _run_task(repo, ids, engagement, "web_testing")
+    task.lease_id = "old-lease"
+    repo.repo.update(task)
+    with usecase.uow_factory() as uow:
+        token = usecase.issue_authority(uow, run, task, engagement, "http_probe", "web_testing")
+        uow.commit()
+    task.lease_id = "new-lease"
+    repo.repo.update(task)
+    with pytest.raises(ForbiddenError, match="lease"):
+        usecase.invoke(token, "http_probe", {"target": "example.com"})
+    assert not tool_runner.calls

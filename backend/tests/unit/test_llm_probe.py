@@ -156,3 +156,24 @@ def test_structured_output_extracts_json_from_explanatory_text():
     gateway = OpenAICompatibleGateway(transport=httpx.MockTransport(handler))
     result = gateway.complete(profile(), [{"role": "user", "content": "go"}], schema)
     assert result["content"] == {"status": "ok"}
+
+
+def test_investigation_union_uses_json_mode_and_still_validates_locally():
+    import pytest
+
+    from pentest_platform.domain.agents import AGENT_CONTRACTS
+    from pentest_platform.domain.errors import ValidationError
+    responses = [
+        {"decision": "TOOL_ACTION", "tool": "http_request", "arguments": {"target": "https://example.com"}, "reason": "Inspect the baseline"},
+        {"decision": "TOOL_ACTION", "tool": "unrestricted_shell", "arguments": {}, "reason": "Forbidden"},
+    ]
+    def handler(request):
+        body = json.loads(request.content)
+        assert body["response_format"] == {"type": "json_object"}
+        assert "output contract" in body["messages"][-1]["content"]
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(responses.pop(0))}}]})
+    gateway = OpenAICompatibleGateway(transport=httpx.MockTransport(handler))
+    schema = AGENT_CONTRACTS["web_testing"].schema
+    assert gateway.complete(profile(), [{"role": "user", "content": "Investigate"}], schema)["content"]["tool"] == "http_request"
+    with pytest.raises(ValidationError):
+        gateway.complete(profile(), [{"role": "user", "content": "Investigate"}], schema)

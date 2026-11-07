@@ -68,3 +68,21 @@ def test_crawler_extracts_openapi_methods_and_parameters():
     assert by_path["/v1/users"]["methods"] == ["GET", "POST"]
     assert by_path["/v1/users"]["parameters"] == ["limit", "role"]
     assert by_path["/v1/users/{id}"]["methods"] == ["DELETE"]
+
+
+def test_each_crawler_retry_reserves_budget_and_checks_controls():
+    reservations = []
+    calls = []
+    def guard():
+        reservations.append(True)
+        return len(reservations) <= 2
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(503)
+    result = EndpointCrawler(transport=httpx.MockTransport(handler)).crawl(
+        base_url="https://example.com", targets=["example.com"], exclusions=[],
+        max_requests=20, request_delay_seconds=0, request_guard=guard,
+    )
+    assert len(calls) == result["requests"] == 2
+    assert len(reservations) == 3
+    assert result["truncated"]
