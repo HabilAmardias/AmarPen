@@ -7,6 +7,7 @@ import UsersPage from '../../../src/routes/(app)/admin/users/+page.svelte';
 import PromptsPage from '../../../src/routes/(app)/admin/prompts/+page.svelte';
 import ModelProfilesPage from '../../../src/routes/(app)/admin/model-profiles/+page.svelte';
 import RiskPoliciesPage from '../../../src/routes/(app)/admin/risk-policies/+page.svelte';
+import SkillsPage from '../../../src/routes/(app)/admin/skills/+page.svelte';
 import McpRegistryPage from '../../../src/routes/(app)/admin/mcp/+page.svelte';
 import { modelProfiles } from '../../mocks/fixtures';
 import { server } from '../../setup';
@@ -127,6 +128,41 @@ describe('admin MCP registry', () => {
     await waitFor(() => expect(screen.getByText('local-mcp')).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'Revoke server' }));
     await waitFor(() => expect(screen.getByText(/MCP server revoked/)).toBeInTheDocument());
+  });
+});
+
+describe('admin skills', () => {
+  it('lists installed packs and active releases', async () => {
+    render(SkillsPage);
+    await waitFor(() => expect(screen.getByText('wstg-web')).toBeInTheDocument());
+    expect(screen.getByText('OWASP WSTG Web Baseline')).toBeInTheDocument();
+    expect(screen.getByText('baseline-skills')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Install pack' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Activate' })).toBeInTheDocument();
+  });
+
+  it('validates, publishes, and releases skill packs', async () => {
+    const user = userEvent.setup();
+    render(SkillsPage);
+    await waitFor(() => expect(screen.getByText('wstg-web')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Validate' })[0]);
+    await waitFor(() => expect(screen.getByText('Skill pack validation recorded.')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Publish' })[0]);
+    await waitFor(() => expect(screen.getByText('Skill pack published.')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Create release draft' }));
+    await waitFor(() => expect(screen.getByText('Skill release draft created.')).toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Activate' })[0]);
+    await waitFor(() => expect(screen.getByText('Skill release activated.')).toBeInTheDocument());
+  });
+
+  it('installs a skill pack from JSON', async () => {
+    const user = userEvent.setup();
+    render(SkillsPage);
+    await waitFor(() => expect(screen.getByText('wstg-web')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('Pack key'), 'custom-pack');
+    await user.type(screen.getByLabelText('Name'), 'Custom Pack');
+    await user.click(screen.getByRole('button', { name: 'Install pack' }));
+    await waitFor(() => expect(screen.getByText('Skill pack installed as draft.')).toBeInTheDocument());
   });
 });
 

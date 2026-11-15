@@ -97,5 +97,8 @@
   ],
   "src/routes/(app)/admin/mcp/+page.svelte": [
     "tests/unit/routes/admin-pages.test.ts"
+  ],
+  "src/routes/(app)/admin/skills/+page.svelte": [
+    "tests/unit/routes/admin-pages.test.ts"
   ]
 }

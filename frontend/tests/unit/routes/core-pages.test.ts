@@ -13,7 +13,7 @@ import FindingsPage from '../../../src/routes/(app)/engagements/[id]/findings/+p
 import FindingPage from '../../../src/routes/(app)/engagements/[id]/findings/[findingId]/+page.svelte';
 import ReportsPage from '../../../src/routes/(app)/engagements/[id]/reports/+page.svelte';
 import AuditPage from '../../../src/routes/(app)/audit/+page.svelte';
-import { run } from '../../mocks/fixtures';
+import { discoveredOrigins, run } from '../../mocks/fixtures';
 import { server } from '../../setup';
 
 describe('authenticated layout', () => {
@@ -64,6 +64,19 @@ describe('engagement pages', () => {
     await Promise.all(polls.map((poll) => Promise.resolve(poll())));
     await waitFor(() => expect(screen.queryByText(/Execution is managed server-side/)).not.toBeInTheDocument());
     expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
+  });
+
+  it('approves a discovered external origin', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('*/api/v1/engagements/eng-1/discovered-origins', () =>
+        HttpResponse.json({ items: discoveredOrigins })
+      )
+    );
+    render(EngagementPage, { props: { data: { id: 'eng-1' } } });
+    await waitFor(() => expect(screen.getByText('https://api.example.com')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Approve and add to scope' }));
+    await waitFor(() => expect(screen.getByText(/Added api.example.com to scope/)).toBeInTheDocument());
   });
 
   it('edit engagement prefills authorization and uses the model dropdown', async () => {

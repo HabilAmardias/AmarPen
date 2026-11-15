@@ -219,3 +219,66 @@ export const scenarios = [
     side_effects: ['read_only']
   }
 ];
+
+export const skillPacks = [
+  {
+    id: 'skill-pack-1',
+    key: 'wstg-web',
+    name: 'OWASP WSTG Web Baseline',
+    version: 1,
+    category: 'wstg',
+    source: 'OWASP WSTG',
+    description: 'Core web testing playbooks.',
+    integrity_hash: 'hash-skill',
+    state: 'PUBLISHED',
+    author_id: 'user-1',
+    change_reason: 'Baseline',
+    created_at: '2026-01-01T12:00:00Z',
+    published_at: '2026-01-01T12:00:00Z',
+    skill_count: 1,
+    skills: [
+      {
+        key: 'wstg.info',
+        title: 'Information gathering',
+        category: 'wstg',
+        hypothesis: 'Map the target first.',
+        applicability: { endpoint_types: ['web'], methods: ['GET'], scenario_keys: ['WSTG-INFO-01'] },
+        scenario_keys: ['WSTG-INFO-01'],
+        prompt_fragment: 'Map endpoints before testing.'
+      }
+    ]
+  }
+];
+
+export const skillReleases = [
+  {
+    id: 'skill-release-1',
+    name: 'baseline-skills',
+    manifest: { 'wstg-web': 'skill-pack-1' },
+    state: 'ACTIVE',
+    version: 1,
+    validated: true,
+    activated_at: '2026-01-01T12:00:00Z',
+    activated_by: 'user-1',
+    created_at: '2026-01-01T12:00:00Z'
+  }
+];
+
+export const discoveredOrigins = [
+  {
+    id: 'origin-1',
+    engagement_id: 'eng-1',
+    run_id: 'run-1',
+    scheme: 'https',
+    host: 'api.example.com',
+    source_type: 'js',
+    source_url: 'https://example.com/assets/app.js',
+    sample_paths: ['/api/v1/me', '/api/v1/refresh'],
+    evidence_refs: ['evidence-1'],
+    status: 'PENDING',
+    decision_reason: '',
+    decided_by: '',
+    decided_at: null,
+    discovered_at: '2026-01-01T12:00:00Z'
+  }
+];

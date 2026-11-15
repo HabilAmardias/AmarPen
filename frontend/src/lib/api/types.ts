@@ -40,6 +40,23 @@ export interface Engagement {
   updated_at: string;
 }
 
+export interface DiscoveredOrigin {
+  id: string;
+  engagement_id: string;
+  run_id: string;
+  scheme: string;
+  host: string;
+  source_type: string;
+  source_url: string;
+  sample_paths: string[];
+  evidence_refs: string[];
+  status: string;
+  decision_reason: string;
+  decided_by: string;
+  decided_at: string | null;
+  discovered_at: string;
+}
+
 export interface Run {
   id: string;
   engagement_id: string;
@@ -289,6 +306,36 @@ export interface AgentActivity {
   access_observations?: Array<{ id: string; endpoint: string; method: string; baseline_identity_id: string; comparison_identity_id: string; baseline_status: number; comparison_status: number; access_granted: boolean; reason: string }>;
 }
 
+
+export interface SkillPackSummary {
+  id: string;
+  key: string;
+  name: string;
+  version: number;
+  category: string;
+  source: string;
+  description: string;
+  integrity_hash: string;
+  state: string;
+  author_id: string;
+  change_reason: string;
+  created_at: string;
+  published_at: string | null;
+  skill_count: number;
+  skills?: Array<Record<string, unknown>>;
+}
+
+export interface SkillReleaseSummary {
+  id: string;
+  name: string;
+  manifest: Record<string, string>;
+  state: string;
+  version: number;
+  validated: boolean;
+  activated_at: string | null;
+  activated_by: string;
+  created_at: string;
+}
 
 export interface McpManifestSummary {
   id: string;

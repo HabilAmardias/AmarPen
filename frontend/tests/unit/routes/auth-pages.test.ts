@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { goto } from '$app/navigation';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import RootPage from '../../../src/routes/+page.svelte';
 import ErrorPage from '../../../src/routes/+error.svelte';
 import LoginPage from '../../../src/routes/login/+page.svelte';
@@ -47,12 +47,23 @@ describe('account pages', () => {
   it('loads the enrollment secret and verifies the code', async () => {
     render(EnrollPage);
     await waitFor(() => expect(screen.getByText('JBSWY3DPEHPK3PXP')).toBeInTheDocument());
+    expect(screen.getByAltText('TOTP enrollment QR code')).toBeInTheDocument();
     const input = screen.getByLabelText('Verification code');
     expect(input).toHaveAttribute('pattern', '[0-9]{6}');
     await fireEvent.input(input, { target: { value: '12-34-56' } });
     expect(input).toHaveValue('123456');
     await fireEvent.submit(input.closest('form') as HTMLFormElement);
     await waitFor(() => expect(screen.getByText('alpha-code')).toBeInTheDocument());
+  });
+
+  it('resets the pending enrollment secret and QR code', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(EnrollPage);
+    await waitFor(() => expect(screen.getByAltText('TOTP enrollment QR code')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Reset enrollment secret' }));
+    await waitFor(() => expect(screen.getByText(/previous QR code is no longer valid/)).toBeInTheDocument());
+    expect(screen.getByText('NEWSECRET234567')).toBeInTheDocument();
   });
 
   it('submits recovery details and reports success', async () => {

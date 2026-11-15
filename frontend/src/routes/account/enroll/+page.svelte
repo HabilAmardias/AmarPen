@@ -8,16 +8,20 @@
 
   let secret = '';
   let provisioningUri = '';
+  let qrDataUrl = '';
   let code = '';
   let recoveryCodes: string[] = [];
   let error = '';
+  let notice = '';
   let pending = false;
+  let resetting = false;
 
   onMount(async () => {
     try {
       const result = await api.auth.enrollmentStart();
       secret = result.secret;
       provisioningUri = result.provisioning_uri;
+      qrDataUrl = result.qr_png_data_url;
     } catch (cause) {
       error = cause instanceof ApiError ? cause.message : 'Unable to start enrollment';
     }
@@ -28,11 +32,34 @@
     pending = true;
     try {
       const result = await api.auth.enrollmentVerify(code);
+      secret = '';
+      provisioningUri = '';
+      qrDataUrl = '';
+      code = '';
       recoveryCodes = result.recovery_codes;
     } catch (cause) {
       error = cause instanceof ApiError ? cause.message : 'Enrollment verification failed';
     } finally {
       pending = false;
+    }
+  }
+
+  async function resetEnrollment() {
+    if (!confirm('Generate a new enrollment secret? The previous QR code and secret will stop working.')) return;
+    resetting = true;
+    error = '';
+    notice = '';
+    try {
+      const result = await api.auth.enrollmentReset();
+      secret = result.secret;
+      provisioningUri = result.provisioning_uri;
+      qrDataUrl = result.qr_png_data_url;
+      code = '';
+      notice = 'A new enrollment secret and QR code were generated. The previous QR code is no longer valid.';
+    } catch (cause) {
+      error = cause instanceof ApiError ? cause.message : 'Unable to reset enrollment secret';
+    } finally {
+      resetting = false;
     }
   }
 
@@ -77,6 +104,7 @@
       <div class="auth-icon" aria-hidden="true"><Key size={28} weight="regular" /></div>
 
       {#if error}<div class="alert error" role="alert">{error}</div>{/if}
+      {#if notice}<div class="alert success" role="status">{notice}</div>{/if}
 
       {#if recoveryCodes.length}
         <div class="alert success" role="status">
@@ -94,15 +122,24 @@
       {:else if provisioningUri}
         <h2>Authenticator Binding</h2>
         <p class="muted small">Add this account to your authenticator, then enter the current six-digit code.</p>
+        {#if qrDataUrl}
+          <div class="qr-panel">
+            <img src={qrDataUrl} alt="TOTP enrollment QR code" width="220" height="220" />
+            <span class="small muted">Scan with your authenticator app</span>
+          </div>
+        {/if}
         <div class="secret-panel">
           <div>
-            <span class="small muted">Manual secret</span>
+            <span class="small muted">Can't scan? Enter this manual secret</span>
             <code>{secret}</code>
           </div>
           <button type="button" class="secondary copy-button" on:click={copySecret}>
             <Copy size={14} aria-hidden="true" /> Copy
           </button>
           <a href={provisioningUri}>Open provisioning URI</a>
+          <button type="button" class="secondary" disabled={resetting} on:click={resetEnrollment}>
+            {resetting ? 'Resetting…' : 'Reset enrollment secret'}
+          </button>
         </div>
         <form class="stack auth-form" on:submit|preventDefault={verify}>
           <label>
@@ -165,6 +202,23 @@
 
   .code-hint {
     margin-top: -0.2rem;
+  }
+
+  .qr-panel {
+    display: grid;
+    justify-items: center;
+    gap: 0.45rem;
+    padding: 0.8rem;
+    margin-bottom: 0.8rem;
+    background: #ffffff;
+    border: 1px solid var(--border);
+  }
+
+  .qr-panel img {
+    display: block;
+    image-rendering: pixelated;
+    max-width: 100%;
+    height: auto;
   }
 
   .secret-panel {

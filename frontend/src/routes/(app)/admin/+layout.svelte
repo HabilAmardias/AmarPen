@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FileCode, Plug, Robot, Scales, ShieldCheck, UsersThree } from 'phosphor-svelte';
+  import { BookOpen, FileCode, Plug, Robot, Scales, ShieldCheck, UsersThree } from 'phosphor-svelte';
 </script>
 
 <div class="stack">
@@ -16,6 +16,7 @@
     <a href="/admin/users"><UsersThree size={14} aria-hidden="true" /> Users</a>
     <a href="/admin/model-profiles"><Robot size={14} aria-hidden="true" /> Model profiles</a>
     <a href="/admin/prompts"><FileCode size={14} aria-hidden="true" /> System prompts</a>
+    <a href="/admin/skills"><BookOpen size={14} aria-hidden="true" /> Skills</a>
     <a href="/admin/risk-policies"><Scales size={14} aria-hidden="true" /> Risk policies</a>
     <a href="/admin/mcp"><Plug size={14} aria-hidden="true" /> MCP registry</a>
   </nav>

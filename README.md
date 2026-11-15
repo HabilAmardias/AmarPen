@@ -139,6 +139,34 @@ Selected coverage floors: backend 80% statements / 60% branches; frontend 85% st
 - Specialists use the method-aware MCP tool `http_request`. Test identities are injected server-side; credentials never enter prompts, MCP arguments, or audit details.
 - Same-endpoint requests from different identities create authorization observations for review.
 
+## TOTP enrollment
+
+- Authenticated users without TOTP receive a QR code generated locally from the `otpauth://` provisioning URI.
+- Pending enrollment secrets are reused across `enrollment/start` calls so refreshing the page keeps the QR valid.
+- `POST /api/v1/auth/enrollment/reset` rotates the pending secret and invalidates the previous QR.
+- QR responses use `Cache-Control: no-store`; secrets and QR data are not audited, logged, or stored.
+- Manual secret entry remains available for users who cannot scan the QR.
+
+## Discovery and external-origin approval
+
+- Discovery parses same-host HTML links/forms, sitemaps, OpenAPI, static JavaScript bundles, and same-host redirects.
+- SPA catch-all pages are detected and excluded from the endpoint map instead of being treated as real API/doc endpoints.
+- Response cookies are captured with sanitized attributes for session-management analysis.
+- External API origins referenced by an approved application are recorded as pending discoveries. They are never probed until approved.
+- Engagement owners and Administrators can approve same-registrable-domain origins with one click. Approval extends scope, creates a new scope-extension attestation, pauses the linked active run, and requires a new run.
+- Unrelated origins require Administrator approval.
+- Discovered origins and their sample paths appear in the engagement detail view.
+
+## Cybersecurity skill packs
+
+- Administrators manage versioned skill packs under **Administration → Skills**.
+- Built-in baseline packs cover OWASP WSTG, OWASP API Security, OpenAPI/REST, JWT, OAuth/OIDC, and GraphQL.
+- Packs can be installed from JSON, edited as drafts, validated, published, released, activated, and rolled back.
+- Runs pin the active skill release in their configuration snapshot. Editing or publishing later packs does not change existing runs.
+- The orchestrator is planning-only. It receives selected, applicable skill cards and may emit `skill_keys` on planned tasks; it never executes target tools directly.
+- Discovery, specialist, and validation investigations receive applicable skill cards as guidance. Skills never override scope, scenario, identity, method, budget, or prohibited-action enforcement.
+- Skill-pack validation rejects malformed cards, unsupported methods, unknown fields, duplicate keys, and oversized prompt fragments.
+
 ## Model profiles and engagement configuration
 
 - `POST /api/v1/admin/model-profiles/{profile_id}/test` runs a bounded reachability, chat-completions, and structured-output probe. Profile creation, API-key rotation, and updates automatically record the latest test result.

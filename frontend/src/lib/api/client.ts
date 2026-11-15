@@ -19,6 +19,9 @@ import type {
   Run,
   Scenario,
   SessionInfo,
+  DiscoveredOrigin,
+  SkillPackSummary,
+  SkillReleaseSummary,
   SystemPrompt,
   User
 } from './types';
@@ -120,7 +123,15 @@ export const api = {
       }),
     logout: () => request<void>('/auth/logout', { method: 'POST' }),
     enrollmentStart: () =>
-      request<{ secret: string; provisioning_uri: string }>('/auth/enrollment/start', { method: 'POST' }),
+      request<{ secret: string; provisioning_uri: string; qr_png_data_url: string }>(
+        '/auth/enrollment/start',
+        { method: 'POST' }
+      ),
+    enrollmentReset: () =>
+      request<{ secret: string; provisioning_uri: string; qr_png_data_url: string }>(
+        '/auth/enrollment/reset',
+        { method: 'POST' }
+      ),
     enrollmentVerify: (code: string) =>
       request<{ user: User; recovery_codes: string[] }>('/auth/enrollment/verify', {
         method: 'POST',
@@ -162,6 +173,17 @@ export const api = {
     list: () => request<ListResponse<Engagement>>('/engagements'),
     quickStart: (payload: Record<string, unknown>) =>
       request<Engagement>('/engagements/quick-start', { method: 'POST', body: payload }),
+    origins: (id: string) => request<ListResponse<DiscoveredOrigin>>(`/engagements/${id}/discovered-origins`),
+    approveOrigin: (id: string, originId: string, expected_version: number, reason = '') =>
+      request<{ origin: DiscoveredOrigin; engagement: Engagement; requires_new_run: boolean }>(
+        `/engagements/${id}/discovered-origins/${originId}/approve`,
+        { method: 'POST', body: { expected_version, reason } }
+      ),
+    rejectOrigin: (id: string, originId: string, expected_version: number, reason = '') =>
+      request<DiscoveredOrigin>(`/engagements/${id}/discovered-origins/${originId}/reject`, {
+        method: 'POST',
+        body: { expected_version, reason }
+      }),
     authorization: (id: string) =>
       request<{ valid: boolean; reason: string; attestation: Record<string, unknown> | null; attestation_text: string }>(
         `/engagements/${id}/authorization`
@@ -302,6 +324,28 @@ export const api = {
       request<ModelProfile>(`/admin/model-profiles/${id}`, { method: 'PUT', body: payload }),
     testModelProfile: (id: string) =>
       request<ModelProfile>(`/admin/model-profiles/${id}/test`, { method: 'POST' }),
+    skillPacks: (includeSkills = false) =>
+      request<ListResponse<SkillPackSummary>>(`/admin/skills/packs?include_skills=${includeSkills}`),
+    skillPack: (id: string) => request<SkillPackSummary>(`/admin/skills/packs/${id}`),
+    createSkillPack: (payload: Record<string, unknown>) =>
+      request<SkillPackSummary>('/admin/skills/packs', { method: 'POST', body: payload }),
+    updateSkillPack: (id: string, payload: Record<string, unknown>) =>
+      request<SkillPackSummary>(`/admin/skills/packs/${id}`, { method: 'PUT', body: payload }),
+    validateSkillPack: (id: string) =>
+      request<{ passed: boolean; errors: string[] }>(`/admin/skills/packs/${id}/validate`, { method: 'POST' }),
+    publishSkillPack: (id: string) =>
+      request<SkillPackSummary>(`/admin/skills/packs/${id}/publish`, { method: 'POST' }),
+    retireSkillPack: (id: string) =>
+      request<SkillPackSummary>(`/admin/skills/packs/${id}/retire`, { method: 'POST' }),
+    skillReleases: () => request<ListResponse<SkillReleaseSummary>>('/admin/skills/releases'),
+    createSkillRelease: (name: string, manifest: Record<string, string>) =>
+      request<SkillReleaseSummary>('/admin/skills/releases', { method: 'POST', body: { name, manifest } }),
+    validateSkillRelease: (id: string) =>
+      request<SkillReleaseSummary>(`/admin/skills/releases/${id}/validate`, { method: 'POST' }),
+    activateSkillRelease: (id: string, reason = '') =>
+      request<SkillReleaseSummary>(`/admin/skills/releases/${id}/activate`, { method: 'POST', body: { reason } }),
+    rollbackSkillRelease: (id: string, reason = '') =>
+      request<SkillReleaseSummary>(`/admin/skills/releases/${id}/rollback`, { method: 'POST', body: { reason } }),
     riskPolicies: () => request<ListResponse<RiskPolicy>>('/admin/risk-policies'),
     createRiskPolicy: (name: string) =>
       request<RiskPolicy>('/admin/risk-policies', { method: 'POST', body: { name } }),

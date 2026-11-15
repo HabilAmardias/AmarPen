@@ -13,8 +13,13 @@ from pentest_platform.usecases.auth import AuthUsecase
 from tests.fakes import actor, user
 
 
-def make_auth(base_kwargs, passwords, totp):
-    return AuthUsecase(**base_kwargs, passwords=passwords, totp=totp, bootstrap_token="boot")
+class FakeQrCode:
+    def data_url(self, value: str) -> str:
+        return "data:image/png;base64," + value
+
+
+def make_auth(base_kwargs, passwords, totp, qr=None):
+    return AuthUsecase(**base_kwargs, passwords=passwords, totp=totp, qr=qr, bootstrap_token="boot")
 
 
 def test_bootstrap_is_one_time(base_kwargs, passwords, totp):
@@ -120,3 +125,30 @@ def test_change_password_revokes_other_sessions(base_kwargs, repo, passwords, to
         full.token,
     )
     assert repo.repo.get(User, "user-1").password_hash == "hashed:new correct horse battery"
+
+
+def test_enrollment_reuses_pending_secret_and_reset_rotates(base_kwargs, repo, passwords, totp):
+    pending = user(totp_enabled=False)
+    pending.totp_secret_enc = ""
+    repo.repo.add(pending)
+    usecase = make_auth(base_kwargs, passwords, totp, FakeQrCode())
+    preauth = usecase.login("admin", "correct horse battery")
+    first = usecase.enrollment_start(preauth.token)
+    second = usecase.enrollment_start(preauth.token)
+    assert first["secret"] == second["secret"]
+    assert first["qr_png_data_url"].startswith("data:image/png;base64,")
+    reset = usecase.enrollment_reset(preauth.token)
+    assert reset["qr_png_data_url"].startswith("data:image/png;base64,")
+    assert reset["provisioning_uri"].startswith("otpauth://totp/")
+
+
+def test_reset_after_enrollment_is_rejected(base_kwargs, repo, passwords, totp):
+    pending = user(totp_enabled=False)
+    pending.totp_secret_enc = ""
+    repo.repo.add(pending)
+    usecase = make_auth(base_kwargs, passwords, totp, FakeQrCode())
+    preauth = usecase.login("admin", "correct horse battery")
+    usecase.enrollment_start(preauth.token)
+    full = usecase.enrollment_verify(preauth.token, "123456")
+    with pytest.raises(ConflictError):
+        usecase.enrollment_reset(full.token)

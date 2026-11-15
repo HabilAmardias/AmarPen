@@ -19,6 +19,12 @@ class StubAuth:
     def logout(self, token):
         return None
 
+    def enrollment_start(self, token):
+        return {"secret": "JBSWY3DPEHPK3PXP", "provisioning_uri": "otpauth://totp/a?secret=x", "qr_png_data_url": "data:image/png;base64,abc"}
+
+    def enrollment_reset(self, token):
+        return {"secret": "NEW", "provisioning_uri": "otpauth://totp/a?secret=new", "qr_png_data_url": "data:image/png;base64,new"}
+
 
 def test_login_maps_credentials_and_sets_cookies():
     client = make_client({get_auth: lambda: StubAuth()})
@@ -27,6 +33,17 @@ def test_login_maps_credentials_and_sets_cookies():
     assert response.json()["requires_totp"] is True
     assert "pt_session" in response.cookies
     assert "pt_csrf" in response.cookies
+
+
+def test_enrollment_start_returns_qr_and_no_store():
+    client = make_client({get_auth: lambda: StubAuth()})
+    response = client.post("/api/v1/auth/enrollment/start")
+    assert response.status_code == 200
+    assert response.json()["qr_png_data_url"].startswith("data:image/png;base64,")
+    assert response.headers["cache-control"] == "no-store"
+    reset = client.post("/api/v1/auth/enrollment/reset")
+    assert reset.status_code == 200
+    assert reset.headers["cache-control"] == "no-store"
 
 
 def test_bootstrap_maps_created_user():

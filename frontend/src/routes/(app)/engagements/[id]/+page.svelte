@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Crosshair, Play, ShieldCheck, Target, WarningCircle } from 'phosphor-svelte';
   import { api, ApiError } from '../../../../lib/api/client';
-  import type { AgentActivity as AgentActivityData, Engagement, Run, Scenario } from '../../../../lib/api/types';
+  import type { AgentActivity as AgentActivityData, DiscoveredOrigin, Engagement, Run, Scenario } from '../../../../lib/api/types';
   import AgentActivity from '../../../../lib/components/AgentActivity.svelte';
   import ErrorView from '../../../../lib/components/ErrorView.svelte';
   import LoadingState from '../../../../lib/components/LoadingState.svelte';
@@ -16,6 +16,9 @@
   let readiness: { ready: boolean; checks: Array<{ name: string; passed: boolean; message: string; blocking: boolean }>; blocking: string[] } | null = null;
   let plan: { selected: Scenario[]; skipped: Array<{ scenario: string; reasons: string[] }> } | null = null;
   let agentActivity: AgentActivityData | null = null;
+  let origins: DiscoveredOrigin[] = [];
+  let originNotice = '';
+  let originBusy = '';
   let loading = true;
   let error = '';
   let correlationId = '';
@@ -32,15 +35,17 @@
     loading = true;
     error = '';
     try {
-      const [engagementResult, runs, readinessResult, planResult] = await Promise.all([
+      const [engagementResult, runs, readinessResult, planResult, originResult] = await Promise.all([
         api.engagements.get(data.id),
         api.runs.list(data.id),
         api.engagements.readiness(data.id),
-        api.engagements.plan(data.id)
+        api.engagements.plan(data.id),
+        api.engagements.origins(data.id)
       ]);
       engagement = engagementResult;
       readiness = readinessResult;
       plan = planResult;
+      origins = originResult.items;
       run = runs.items[0] ?? null;
       if (run) {
         agentActivity = await api.runs.agents(run.id);
@@ -75,6 +80,27 @@
       error = cause instanceof ApiError ? cause.message : 'Unable to record attestation';
     } finally {
       attesting = false;
+    }
+  }
+
+  async function decideOrigin(origin: DiscoveredOrigin, decision: 'approve' | 'reject') {
+    originBusy = origin.id;
+    originNotice = '';
+    try {
+      if (decision === 'approve') {
+        const result = await api.engagements.approveOrigin(data.id, origin.id, engagement?.config_version ?? 0, 'Discovered by approved application');
+        originNotice = result.requires_new_run
+          ? `Added ${origin.host} to scope. Start a new run to include it.`
+          : `Added ${origin.host} to scope.`;
+      } else {
+        await api.engagements.rejectOrigin(data.id, origin.id, engagement?.config_version ?? 0, 'Rejected by engagement owner');
+        originNotice = `Rejected ${origin.host}.`;
+      }
+      await load();
+    } catch (cause) {
+      error = cause instanceof ApiError ? cause.message : 'Unable to update discovered origin';
+    } finally {
+      originBusy = '';
     }
   }
 
@@ -225,6 +251,43 @@
         {/if}
       </section>
     </div>
+
+    {#if origins.length}
+      <section class="card stack" aria-labelledby="origins-heading">
+        <div class="row" style="justify-content: space-between;">
+          <span class="panel-kicker">DISCOVERED ORIGINS</span>
+          <span class="hud-meta"><span>{origins.filter((origin) => origin.status === 'PENDING').length} PENDING</span></span>
+        </div>
+        <h2 id="origins-heading">External API Origins</h2>
+        {#if originNotice}<div class="alert success" role="status">{originNotice}</div>{/if}
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Discovered external origins</caption>
+            <thead><tr><th scope="col">Origin</th><th scope="col">Source</th><th scope="col">Sample paths</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+            <tbody>
+              {#each origins as origin (origin.id)}
+                <tr>
+                  <td class="asset-cell">{origin.scheme}://{origin.host}</td>
+                  <td>{origin.source_type}<div class="small muted">{origin.status === 'PENDING' ? 'Referenced by approved app' : origin.decision_reason}</div></td>
+                  <td class="small muted">{origin.sample_paths.slice(0, 4).join(', ') || '—'}</td>
+                  <td><StatusBadge value={origin.status} /></td>
+                  <td>
+                    {#if origin.status === 'PENDING'}
+                      <div class="row action-row">
+                        <button type="button" disabled={originBusy === origin.id} on:click={() => decideOrigin(origin, 'approve')}>Approve and add to scope</button>
+                        <button type="button" class="secondary" disabled={originBusy === origin.id} on:click={() => decideOrigin(origin, 'reject')}>Reject</button>
+                      </div>
+                    {:else}
+                      <span class="small muted">{origin.decided_by ? 'Decision recorded' : '—'}</span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {/if}
 
     <AgentActivity activity={agentActivity} />
 

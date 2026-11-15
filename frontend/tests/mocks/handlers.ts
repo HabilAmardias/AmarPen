@@ -10,7 +10,18 @@ export const handlers = [
   http.post('*/api/v1/auth/totp', () => json({ user: fixtures.user, requires_enrollment: false, next: 'session' })),
   http.post('*/api/v1/auth/logout', () => new HttpResponse(null, { status: 204 })),
   http.post('*/api/v1/auth/enrollment/start', () =>
-    json({ secret: 'JBSWY3DPEHPK3PXP', provisioning_uri: 'otpauth://totp/ai-pentest:admin?secret=JBSWY3DPEHPK3PXP' })
+    json({
+      secret: 'JBSWY3DPEHPK3PXP',
+      provisioning_uri: 'otpauth://totp/ai-pentest:admin?secret=JBSWY3DPEHPK3PXP',
+      qr_png_data_url: 'data:image/png;base64,iVBORw0KGgo='
+    })
+  ),
+  http.post('*/api/v1/auth/enrollment/reset', () =>
+    json({
+      secret: 'NEWSECRET234567',
+      provisioning_uri: 'otpauth://totp/ai-pentest:admin?secret=NEWSECRET234567',
+      qr_png_data_url: 'data:image/png;base64,iVBORw0KGgo='
+    })
   ),
   http.post('*/api/v1/auth/enrollment/verify', () =>
     json({ user: { ...fixtures.user, totp_enabled: true }, recovery_codes: ['alpha-code', 'beta-code'] })
@@ -22,6 +33,9 @@ export const handlers = [
   http.post('*/api/v1/engagements/quick-start', () => json({ ...fixtures.engagement, base_url: 'https://example.com' }, 201)),
   http.post('*/api/v1/engagements', () => json(fixtures.engagement, 201)),
   http.get('*/api/v1/engagements/:id/authorization', () => json({ valid: true, reason: '', attestation: null, attestation_text: 'attestation' })),
+  http.get('*/api/v1/engagements/:id/discovered-origins', () => list([])),
+  http.post('*/api/v1/engagements/:id/discovered-origins/:originId/approve', () => json({ origin: fixtures.discoveredOrigins[0], engagement: fixtures.engagement, requires_new_run: true })),
+  http.post('*/api/v1/engagements/:id/discovered-origins/:originId/reject', () => json({ ...fixtures.discoveredOrigins[0], status: 'REJECTED' })),
   http.post('*/api/v1/engagements/:id/attest', () => json({ id: 'attestation-1' })),
   http.get('*/api/v1/engagements/:id', () => json(fixtures.engagement)),
   http.put('*/api/v1/engagements/:id', () => json(fixtures.engagement)),
@@ -125,6 +139,17 @@ export const handlers = [
   http.post('*/api/v1/admin/model-profiles', () => json(fixtures.modelProfiles[0], 201)),
   http.post('*/api/v1/admin/model-profiles/:id/test', () => json({ ...fixtures.modelProfiles[0], last_test_status: 'REACHABLE' })),
   http.put('*/api/v1/admin/model-profiles/:id', () => json(fixtures.modelProfiles[0])),
+  http.get('*/api/v1/admin/skills/packs', () => list(fixtures.skillPacks)),
+  http.post('*/api/v1/admin/skills/packs', () => json(fixtures.skillPacks[0], 201)),
+  http.put('*/api/v1/admin/skills/packs/:id', () => json(fixtures.skillPacks[0])),
+  http.post('*/api/v1/admin/skills/packs/:id/validate', () => json({ passed: true, errors: [] })),
+  http.post('*/api/v1/admin/skills/packs/:id/publish', () => json({ ...fixtures.skillPacks[0], state: 'PUBLISHED' })),
+  http.post('*/api/v1/admin/skills/packs/:id/retire', () => json({ ...fixtures.skillPacks[0], state: 'RETIRED' })),
+  http.get('*/api/v1/admin/skills/releases', () => list(fixtures.skillReleases)),
+  http.post('*/api/v1/admin/skills/releases', () => json(fixtures.skillReleases[0], 201)),
+  http.post('*/api/v1/admin/skills/releases/:id/validate', () => json({ ...fixtures.skillReleases[0], validated: true })),
+  http.post('*/api/v1/admin/skills/releases/:id/activate', () => json({ ...fixtures.skillReleases[0], state: 'ACTIVE' })),
+  http.post('*/api/v1/admin/skills/releases/:id/rollback', () => json({ ...fixtures.skillReleases[0], state: 'ROLLED_BACK' })),
   http.get('*/api/v1/admin/risk-policies', () => list(fixtures.riskPolicies)),
   http.post('*/api/v1/admin/risk-policies', () => json(fixtures.riskPolicies[0], 201)),
   http.post('*/api/v1/admin/risk-policies/:id/activate', () => json(fixtures.riskPolicies[0])),
